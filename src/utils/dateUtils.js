@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Date / ID utilities — identical logic to web app
+// Date / ID utilities
 // ──────────────────────────────────────────────
 
 export function todayMidnight() {
@@ -18,13 +18,13 @@ export function calcRemainingDays(deadline) {
 }
 
 /**
- * Formats an ISO date string to Turkish locale.
- * e.g. "2026-03-15" → "15 Mart 2026"
+ * Formats an ISO date string to the given locale.
+ * e.g. "2026-03-15" → "15 Mart 2026" (tr-TR)
  */
-export function formatDate(isoDate) {
+export function formatDate(isoDate, locale = 'tr-TR') {
     if (!isoDate) return '';
     const d = new Date(isoDate + 'T12:00:00');
-    return d.toLocaleDateString('tr-TR', {
+    return d.toLocaleDateString(locale, {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -59,14 +59,15 @@ export function generateId() {
 }
 
 /**
- * Returns chip config {label, type} based on remaining days.
+ * Returns chip config { key, params, type } based on remaining days.
+ * Components translate the key using t(key, params).
  * type: 'done' | 'urgent' | 'warning' | 'good'
  */
 export function getDayChipInfo(days, completed) {
-    if (completed) return { label: '✓ Tamamlandı', type: 'done' };
-    if (days < 0) return { label: `${Math.abs(days)} gün geçti`, type: 'urgent' };
-    if (days === 0) return { label: 'Bugün!', type: 'urgent' };
-    if (days <= 3) return { label: '⚡ Acil', type: 'urgent' };
-    if (days <= 7) return { label: '⚠️ Bu hafta', type: 'warning' };
-    return { label: 'On track', type: 'good' };
+    if (completed) return { key: 'chip.completed', params: {}, type: 'done' };
+    if (days < 0) return { key: 'chip.daysAgo', params: { n: Math.abs(days) }, type: 'urgent' };
+    if (days === 0) return { key: 'chip.today', params: {}, type: 'urgent' };
+    if (days <= 3) return { key: 'chip.urgent', params: {}, type: 'urgent' };
+    if (days <= 7) return { key: 'chip.thisWeek', params: {}, type: 'warning' };
+    return { key: 'chip.onTrack', params: {}, type: 'good' };
 }

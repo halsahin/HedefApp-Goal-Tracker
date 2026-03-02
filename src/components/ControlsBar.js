@@ -1,37 +1,31 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, Typography, Spacing, Radii } from '../constants/theme';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const SORT_OPTIONS = [
-    { key: 'days', label: 'Kalan Güne Göre' },
-    { key: 'date', label: 'Tarihe Göre' },
-    { key: 'category', label: 'Kategoriye Göre' },
-    { key: 'name', label: 'Ada Göre' },
+    { key: 'days', tKey: 'sort.byDays' },
+    { key: 'date', tKey: 'sort.byDate' },
+    { key: 'category', tKey: 'sort.byCategory' },
+    { key: 'name', tKey: 'sort.byName' },
 ];
 
-/**
- * ControlsBar — sort selector + "Yeni Hedef" button.
- * Mirrors <div class="controls-bar">.
- *
- * Since React Native has no native <select>, we implement a
- * simple inline dropdown that toggles on press.
- */
 export default function ControlsBar({ sortBy, onSortChange, onAddPress }) {
+    const { t } = useLanguage();
     const [open, setOpen] = useState(false);
     const current = SORT_OPTIONS.find(o => o.key === sortBy) || SORT_OPTIONS[0];
 
     return (
         <View style={styles.bar}>
-            {/* Sort dropdown */}
             <View style={styles.sortGroup}>
-                <Text style={styles.sortLabel}>Sırala:</Text>
+                <Text style={styles.sortLabel}>{t('sort.label')}</Text>
                 <View>
                     <TouchableOpacity
                         style={styles.selector}
                         onPress={() => setOpen(v => !v)}
                         activeOpacity={0.8}
                     >
-                        <Text style={styles.selectorText}>{current.label}</Text>
+                        <Text style={styles.selectorText}>{t(current.tKey)}</Text>
                         <Text style={styles.arrow}>{open ? '▴' : '▾'}</Text>
                     </TouchableOpacity>
 
@@ -56,7 +50,7 @@ export default function ControlsBar({ sortBy, onSortChange, onAddPress }) {
                                             opt.key === sortBy && styles.dropdownTextActive,
                                         ]}
                                     >
-                                        {opt.label}
+                                        {t(opt.tKey)}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -65,13 +59,12 @@ export default function ControlsBar({ sortBy, onSortChange, onAddPress }) {
                 </View>
             </View>
 
-            {/* Add button */}
             <TouchableOpacity
                 style={styles.addBtn}
                 onPress={onAddPress}
                 activeOpacity={0.8}
             >
-                <Text style={styles.addBtnText}>+ Yeni Hedef</Text>
+                <Text style={styles.addBtnText}>{t('btn.newGoal')}</Text>
             </TouchableOpacity>
         </View>
     );

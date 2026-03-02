@@ -18,19 +18,15 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors, Typography, Spacing, Radii, Shadows } from '../constants/theme';
 import { CATEGORIES } from '../constants/categories';
 import { defaultDeadline, deadlineFromDays } from '../utils/dateUtils';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-// Üstten bu kadar px aşağı sürüklenirse veya bu hız aşılırsa kapanır
 const SWIPE_CLOSE_THRESHOLD = 80;
 const SWIPE_VELOCITY_THRESHOLD = 0.5;
 
-/**
- * AddGoalModal — Bottom-sheet modal with:
- *   ✓ KeyboardAvoidingView: klavye açılınca içerik yukarı kayar
- *   ✓ Swipe-to-dismiss: handle'dan aşağı kaydırınca modal kapanır
- *   ✓ Pastel sarı/gri tasarım korunmuştur
- */
 export default function AddGoalModal({ visible, onClose, onSubmit }) {
+  const { t, locale } = useLanguage();
+
   const [name, setName] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0].label);
   const [deadlineMode, setDeadlineMode] = useState('date');
@@ -41,13 +37,10 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const nameRef = useRef(null);
-  // Swipe animasyon değeri (0 = kapalı pozisyon, SCREEN_HEIGHT = görünür konum)
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
-  // ── Modal açılış / kapanış animasyonu ────────────────────
   useEffect(() => {
     if (visible) {
-      // Formu sıfırla
       setName('');
       setCategory(CATEGORIES[0].label);
       setDeadlineMode('date');
@@ -56,9 +49,8 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
       setDescription('');
       setNameError(false);
       setShowDatePicker(false);
-      translateY.setValue(SCREEN_HEIGHT); // başlangıç: ekranın altında
+      translateY.setValue(SCREEN_HEIGHT);
 
-      // Sheet'i yukarı çek (native Modal'ın animationType="slide"'ı ile benzer)
       Animated.spring(translateY, {
         toValue: 0,
         useNativeDriver: true,
@@ -69,7 +61,6 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
     }
   }, [visible]);
 
-  // ── Kapatma animasyonu ────────────────────────────────────
   function animatedClose() {
     Keyboard.dismiss();
     Animated.timing(translateY, {
@@ -79,29 +70,19 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
     }).start(() => onClose());
   }
 
-  // ── PanResponder — swipe-to-dismiss ──────────────────────
   const panResponder = useRef(
     PanResponder.create({
-      // Yalnızca dikey aşağı hareketi yakala
       onMoveShouldSetPanResponder: (_, g) =>
         g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
       onMoveShouldSetPanResponderCapture: (_, g) =>
         g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
-
       onPanResponderMove: (_, g) => {
-        // Yalnızca aşağı hareket izin ver (negatif dy = yukarı = engelle)
         if (g.dy > 0) translateY.setValue(g.dy);
       },
-
       onPanResponderRelease: (_, g) => {
-        if (
-          g.dy > SWIPE_CLOSE_THRESHOLD ||
-          g.vy > SWIPE_VELOCITY_THRESHOLD
-        ) {
-          // Eşik aşıldı → kapat
+        if (g.dy > SWIPE_CLOSE_THRESHOLD || g.vy > SWIPE_VELOCITY_THRESHOLD) {
           animatedClose();
         } else {
-          // Eşik aşılmadı → geri yerine getir
           Animated.spring(translateY, {
             toValue: 0,
             useNativeDriver: true,
@@ -112,7 +93,6 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
     })
   ).current;
 
-  // ── Form submit ────────────────────────────────────────────
   function handleSubmit() {
     if (!name.trim()) {
       setNameError(true);
@@ -137,32 +117,26 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
     animatedClose();
   }
 
-  const formattedDate = selectedDate.toLocaleDateString('tr-TR', {
+  const formattedDate = selectedDate.toLocaleDateString(locale, {
     day: 'numeric', month: 'long', year: 'numeric',
   });
 
-  // Modal görünür değilse render etme (performans)
   if (!visible) return null;
 
   return (
     <Modal
       visible={visible}
-      animationType="none"   // kendi Animated.spring animasyonumuzu kullanıyoruz
+      animationType="none"
       transparent
-      statusBarTranslucent   // Android'de overlay tam ekran kaplasın
+      statusBarTranslucent
       onRequestClose={animatedClose}
     >
-      {/* ── Karartma overlay ── */}
       <TouchableOpacity
         style={styles.overlay}
         activeOpacity={1}
         onPress={animatedClose}
       />
 
-      {/* ── Klavye + Sheet sarmalayıcı ──
-           KAV tam ekranı kaplar, sheet alta hizalanır.
-           behavior='padding' her iki platformda da çalışır;
-           klavye açılınca KAV yukarıdan sıkışır → sheet otomatik kayar. */}
       <KeyboardAvoidingView
         style={styles.kavWrapper}
         behavior="padding"
@@ -171,7 +145,6 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
         <Animated.View
           style={[styles.sheet, { transform: [{ translateY }] }]}
         >
-          {/* ── Drag handle (swipe-to-dismiss tetikleyicisi) ── */}
           <View
             style={styles.handleArea}
             {...panResponder.panHandlers}
@@ -180,9 +153,8 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
             <View style={styles.handle} />
           </View>
 
-          {/* ── Başlık ── */}
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Yeni Hedef Ekle</Text>
+            <Text style={styles.modalTitle}>{t('addModal.title')}</Text>
             <TouchableOpacity
               onPress={animatedClose}
               style={styles.closeBtn}
@@ -192,7 +164,6 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
             </TouchableOpacity>
           </View>
 
-          {/* ── Form içeriği (kaydırılabilir) ── */}
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -201,27 +172,27 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
             {/* Hedef Adı */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                Hedef Adı <Text style={styles.required}>*</Text>
+                {t('addModal.goalName')} <Text style={styles.required}>*</Text>
               </Text>
               <TextInput
                 ref={nameRef}
                 style={[styles.input, nameError && styles.inputError]}
-                placeholder="örn. IELTS sınavına hazırlan"
+                placeholder={t('addModal.placeholder.name')}
                 placeholderTextColor={Colors.textLight}
                 value={name}
-                onChangeText={t => { setName(t); setNameError(false); }}
+                onChangeText={txt => { setName(txt); setNameError(false); }}
                 maxLength={100}
                 returnKeyType="next"
               />
               {nameError && (
-                <Text style={styles.errorText}>Hedef adı boş bırakılamaz</Text>
+                <Text style={styles.errorText}>{t('addModal.error.name')}</Text>
               )}
               <Text style={styles.charCounter}>{name.length}/100</Text>
             </View>
 
             {/* Kategori */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Kategori</Text>
+              <Text style={styles.label}>{t('addModal.category')}</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -238,7 +209,7 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
                       activeOpacity={0.75}
                     >
                       <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
-                        {cat.icon} {cat.label}
+                        {cat.icon} {t(`cat.${cat.key}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -248,7 +219,7 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
 
             {/* Bitiş Tarihi Toggle */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Bitiş Tarihi</Text>
+              <Text style={styles.label}>{t('addModal.deadline')}</Text>
               <View style={styles.toggle}>
                 {['date', 'days'].map(mode => (
                   <TouchableOpacity
@@ -258,14 +229,13 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
                     activeOpacity={0.8}
                   >
                     <Text style={[styles.toggleBtnText, deadlineMode === mode && styles.toggleBtnTextActive]}>
-                      {mode === 'date' ? 'Tarih Seç' : 'Gün Say'}
+                      {mode === 'date' ? t('addModal.pickDate') : t('addModal.countDays')}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            {/* Tarih seçici */}
             {deadlineMode === 'date' && (
               <View style={styles.formGroup}>
                 <TouchableOpacity
@@ -292,20 +262,19 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
               </View>
             )}
 
-            {/* Gün sayısı girişi */}
             {deadlineMode === 'days' && (
               <View style={styles.formGroup}>
                 <View style={styles.daysRow}>
                   <TextInput
                     style={[styles.input, styles.daysInput]}
-                    placeholder="örn. 30"
+                    placeholder={t('addModal.placeholder.days')}
                     placeholderTextColor={Colors.textLight}
                     value={daysInput}
                     onChangeText={setDaysInput}
                     keyboardType="numeric"
                     maxLength={4}
                   />
-                  <Text style={styles.daysUnit}>gün</Text>
+                  <Text style={styles.daysUnit}>{t('addModal.days')}</Text>
                 </View>
               </View>
             )}
@@ -313,11 +282,11 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
             {/* Notlar */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                Notlar <Text style={styles.optional}>(isteğe bağlı)</Text>
+                {t('addModal.notes')} <Text style={styles.optional}>{t('addModal.optional')}</Text>
               </Text>
               <TextInput
                 style={[styles.input, styles.textarea]}
-                placeholder="Hedefiniz hakkında kısa bir not..."
+                placeholder={t('addModal.placeholder.notes')}
                 placeholderTextColor={Colors.textLight}
                 value={description}
                 onChangeText={setDescription}
@@ -335,14 +304,14 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
                 onPress={animatedClose}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cancelBtnText}>İptal</Text>
+                <Text style={styles.cancelBtnText}>{t('addModal.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.submitBtn}
                 onPress={handleSubmit}
                 activeOpacity={0.8}
               >
-                <Text style={styles.submitBtnText}>✦ Hedef Ekle</Text>
+                <Text style={styles.submitBtnText}>{t('addModal.submit')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -359,8 +328,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(10,10,30,0.45)',
   },
-  // KAV tam ekrana yayılır; sheet alta hizalanır (justifyContent: flex-end).
-  // Klavye açılınca KAV üsten sıkışır ve sheet otomatik yukarı kayar.
   kavWrapper: {
     position: 'absolute',
     top: 0,
@@ -378,7 +345,6 @@ const styles = StyleSheet.create({
     maxHeight: SCREEN_HEIGHT * 0.92,
     ...Shadows.lg,
   },
-  // Handle alanı — PanResponder buraya bağlı, dokunma hitbox'ı geniş
   handleArea: {
     alignItems: 'center',
     paddingTop: Spacing.sm,

@@ -3,19 +3,18 @@ import {
     View, Text, TouchableOpacity, StyleSheet, ScrollView,
 } from 'react-native';
 import { Colors, Typography, Spacing, Radii } from '../constants/theme';
+import { useLanguage } from '../i18n/LanguageContext';
 
-const FILTERS = [
-    { key: 'all', label: 'Tümü' },
-    { key: 'active', label: 'Aktif' },
-    { key: 'completed', label: 'Tamamlanan' },
-    { key: 'pinned', label: '⭐ Favori' },
+const FILTER_KEYS = [
+    { key: 'all', tKey: 'filter.all' },
+    { key: 'active', tKey: 'filter.active' },
+    { key: 'completed', tKey: 'filter.completed' },
+    { key: 'pinned', tKey: 'filter.pinned' },
 ];
 
-/**
- * FilterTabs — horizontal tab row, tightly wraps its content.
- * alignSelf: 'flex-start' on tabGroup prevents vertical stretching.
- */
 export default function FilterTabs({ filterBy, onFilterChange }) {
+    const { t } = useLanguage();
+
     return (
         <ScrollView
             horizontal
@@ -23,7 +22,7 @@ export default function FilterTabs({ filterBy, onFilterChange }) {
             contentContainerStyle={styles.scrollContent}
         >
             <View style={styles.tabGroup}>
-                {FILTERS.map(f => {
+                {FILTER_KEYS.map(f => {
                     const active = filterBy === f.key;
                     return (
                         <TouchableOpacity
@@ -33,7 +32,7 @@ export default function FilterTabs({ filterBy, onFilterChange }) {
                             activeOpacity={0.75}
                         >
                             <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                                {f.label}
+                                {t(f.tKey)}
                             </Text>
                         </TouchableOpacity>
                     );
@@ -47,13 +46,12 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingHorizontal: Spacing.lg,
         paddingBottom: Spacing.sm,
-        // İçeriği dikeyde sıkıştır; ScrollView yüksekliği içeriğe göre ölçeklesin
         alignItems: 'flex-start',
     },
     tabGroup: {
         flexDirection: 'row',
-        alignItems: 'center',   // sekmeler dikeyde ortada
-        alignSelf: 'flex-start', // beyaz kutu yalnızca sekmeleri sarar, uzamaz
+        alignItems: 'center',
+        alignSelf: 'flex-start',
         gap: Spacing.xs,
         backgroundColor: Colors.surface,
         borderWidth: 1,

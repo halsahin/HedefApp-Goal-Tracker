@@ -1,25 +1,25 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, Typography, Spacing, Radii, Shadows } from '../constants/theme';
-import { CATEGORY_MAP } from '../constants/categories';
+import { CATEGORY_MAP, getCategoryLabel } from '../constants/categories';
 import {
     calcRemainingDays,
     formatDate,
     getDayChipInfo,
 } from '../utils/dateUtils';
+import { useLanguage } from '../i18n/LanguageContext';
 
-/**
- * GoalCard — single goal card, faithful to the web card design.
- * Left border strip changes color based on state.
- */
 export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete, onPress }) {
+    const { t, locale } = useLanguage();
     const days = calcRemainingDays(goal.deadline);
     const overdue = !goal.completed && days < 0;
     const icon = CATEGORY_MAP[goal.category] || '📌';
     const chipInfo = getDayChipInfo(days, goal.completed);
 
     const dayDisplay = goal.completed ? '✓' : (days < 0 ? `${Math.abs(days)}` : `${days}`);
-    const dayTextLabel = goal.completed ? 'Bitti' : (days < 0 ? 'gün önce' : 'gün kaldı');
+    const dayTextLabel = goal.completed
+        ? t('goalCard.done')
+        : (days < 0 ? t('goalCard.daysAgo') : t('goalCard.daysLeft'));
 
     const borderColor = goal.completed
         ? Colors.success
@@ -44,10 +44,8 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
             onPress={onPress}
             activeOpacity={0.85}
         >
-            {/* Left color strip */}
             <View style={[styles.strip, { backgroundColor: borderColor }]} />
 
-            {/* Checkbox — kendi onPress'i var, kartı açmaz */}
             <TouchableOpacity
                 style={[styles.checkbox, goal.completed && styles.checkboxDone]}
                 onPress={() => onToggleComplete(goal.id)}
@@ -56,35 +54,31 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
                 {goal.completed && <Text style={styles.checkmark}>✓</Text>}
             </TouchableOpacity>
 
-            {/* Body */}
             <View style={styles.body}>
-                {/* Category badge */}
                 <View style={styles.meta}>
                     <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryBadgeText}>{icon} {goal.category}</Text>
+                        <Text style={styles.categoryBadgeText}>
+                            {icon} {getCategoryLabel(goal.category, t)}
+                        </Text>
                     </View>
                 </View>
 
-                {/* Name */}
                 <Text style={[styles.name, goal.completed && styles.nameCompleted]} numberOfLines={2}>
                     {goal.name}
                 </Text>
 
-                {/* Optional description */}
                 {!!goal.description && (
                     <Text style={styles.desc} numberOfLines={2}>{goal.description}</Text>
                 )}
 
-                {/* Date */}
-                <Text style={styles.dateInfo}>📅 {formatDate(goal.deadline)}</Text>
+                <Text style={styles.dateInfo}>📅 {formatDate(goal.deadline, locale)}</Text>
             </View>
 
-            {/* Right: days + actions */}
             <View style={styles.right}>
                 <View style={styles.daysBlock}>
                     <Text style={[styles.daysNumber, { color: daysNumColor }]}>{dayDisplay}</Text>
                     <Text style={styles.daysLabel}>{dayTextLabel}</Text>
-                    <ChipView chipInfo={chipInfo} />
+                    <ChipView chipInfo={chipInfo} t={t} />
                 </View>
 
                 <View style={styles.actions}>
@@ -110,7 +104,6 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
     );
 }
 
-// ── Chip ──────────────────────────────────────────────
 const chipStyles = {
     done: { bg: Colors.successSoft, text: '#2E8B44' },
     good: { bg: Colors.successSoft, text: '#2E8B44' },
@@ -118,16 +111,17 @@ const chipStyles = {
     urgent: { bg: Colors.dangerSoft, text: Colors.danger },
 };
 
-function ChipView({ chipInfo }) {
+function ChipView({ chipInfo, t }) {
     const style = chipStyles[chipInfo.type] || chipStyles.good;
     return (
         <View style={[styles.chip, { backgroundColor: style.bg }]}>
-            <Text style={[styles.chipText, { color: style.text }]}>{chipInfo.label}</Text>
+            <Text style={[styles.chipText, { color: style.text }]}>
+                {t(chipInfo.key, chipInfo.params)}
+            </Text>
         </View>
     );
 }
 
-// ── Styles ────────────────────────────────────────────
 const styles = StyleSheet.create({
     card: {
         borderRadius: Radii.md,

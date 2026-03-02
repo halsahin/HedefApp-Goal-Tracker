@@ -15,8 +15,11 @@ import GoalDetailModal from './src/components/GoalDetailModal';
 import Toast from './src/components/Toast';
 import AdBannerComponent from './src/components/AdBannerComponent';
 import { Colors } from './src/constants/theme';
+import { LanguageProvider, useLanguage } from './src/i18n/LanguageContext';
 
-export default function App() {
+function AppContent() {
+  const { t } = useLanguage();
+
   const {
     goals,
     rawGoals,
@@ -39,12 +42,9 @@ export default function App() {
   const [detailGoalId, setDetailGoalId] = useState(null);
   const [toastMsg, setToastMsg] = useState(null);
 
-  // goals'a her render'da closure kurmak yerine ref üzerinden oku
-  // → handleToggleComplete/handleTogglePin'in goals değiştiğinde yeniden oluşması engellenir
   const rawGoalsRef = useRef(rawGoals);
   useEffect(() => { rawGoalsRef.current = rawGoals; }, [rawGoals]);
 
-  // rawGoals'dan seçili hedefi bul — liste yeniden sıralanınca bile güncel kalır
   const detailGoal = detailGoalId
     ? rawGoals.find(g => g.id === detailGoalId) ?? null
     : null;
@@ -55,45 +55,45 @@ export default function App() {
 
   const handleAddGoal = useCallback((data) => {
     addGoal(data);
-    showToast('✦ Hedef eklendi!');
-  }, [addGoal, showToast]);
+    showToast(t('toast.goalAdded'));
+  }, [addGoal, showToast, t]);
 
   const handleToggleComplete = useCallback((id) => {
     const g = rawGoalsRef.current.find(x => x.id === id);
     toggleComplete(id);
-    showToast(g?.completed ? '↩️ Geri alındı' : '🎉 Hedef tamamlandı!');
-  }, [toggleComplete, showToast]);
+    showToast(g?.completed ? t('toast.undone') : t('toast.goalCompleted'));
+  }, [toggleComplete, showToast, t]);
 
   const handleTogglePin = useCallback((id) => {
     const g = rawGoalsRef.current.find(x => x.id === id);
     togglePin(id);
-    showToast(g?.pinned ? '☆ Favoriden çıkarıldı' : '⭐ Favoriye alındı');
-  }, [togglePin, showToast]);
+    showToast(g?.pinned ? t('toast.unpinned') : t('toast.pinned'));
+  }, [togglePin, showToast, t]);
 
   const handleDelete = useCallback((id) => {
     deleteGoal(id);
-    showToast('🗑 Hedef silindi');
-  }, [deleteGoal, showToast]);
+    showToast(t('toast.goalDeleted'));
+  }, [deleteGoal, showToast, t]);
 
   const handleUpdateGoal = useCallback((id, data) => {
     updateGoal(id, data);
-    showToast('✓ Hedef güncellendi');
-  }, [updateGoal, showToast]);
+    showToast(t('toast.goalUpdated'));
+  }, [updateGoal, showToast, t]);
 
   const handleAddUpdate = useCallback((goalId, text) => {
     addUpdate(goalId, text);
-    showToast('📝 Not eklendi');
-  }, [addUpdate, showToast]);
+    showToast(t('toast.noteAdded'));
+  }, [addUpdate, showToast, t]);
 
   const handleEditUpdate = useCallback((goalId, updateId, text) => {
     editUpdate(goalId, updateId, text);
-    showToast('✓ Not güncellendi');
-  }, [editUpdate, showToast]);
+    showToast(t('toast.noteUpdated'));
+  }, [editUpdate, showToast, t]);
 
   const handleDeleteUpdate = useCallback((goalId, updateId) => {
     deleteUpdate(goalId, updateId);
-    showToast('🗑 Not silindi');
-  }, [deleteUpdate, showToast]);
+    showToast(t('toast.noteDeleted'));
+  }, [deleteUpdate, showToast, t]);
 
   const renderItem = useCallback(({ item }) => (
     <GoalCard
@@ -117,7 +117,6 @@ export default function App() {
         translucent={false}
       />
 
-      {/* Sabit üst alan — liste uzasa da asla ezilmez */}
       <View style={styles.topFixed}>
         <AppHeader totalCount={totalCount} dueCount={dueCount} />
         <ControlsBar
@@ -128,7 +127,6 @@ export default function App() {
         <FilterTabs filterBy={filterBy} onFilterChange={setFilterBy} />
       </View>
 
-      {/* Kalan alanı dolduran liste */}
       <View style={styles.listWrapper}>
         <FlatList
           data={goals}
@@ -143,17 +141,14 @@ export default function App() {
         />
       </View>
 
-      {/* Ad Banner (bottom, always visible) */}
       <AdBannerComponent />
 
-      {/* Yeni Hedef Modal */}
       <AddGoalModal
         visible={addModalVisible}
         onClose={() => setAddModalVisible(false)}
         onSubmit={handleAddGoal}
       />
 
-      {/* Hedef Detay + Gelişim Günlüğü Modal */}
       <GoalDetailModal
         goal={detailGoal}
         visible={!!detailGoal}
@@ -164,9 +159,16 @@ export default function App() {
         onDeleteUpdate={handleDeleteUpdate}
       />
 
-      {/* Toast */}
       <Toast message={toastMsg} onHide={() => setToastMsg(null)} />
     </View>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }
 
@@ -174,16 +176,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.bg,
-    // edgeToEdgeEnabled:true ile Android status bar'ının altına çiziliyor.
-    // SafeAreaView bu durumda yeterli olmuyor; StatusBar.currentHeight
-    // tam olarak gereken boşluğu verir, fazlasını değil.
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 44,
   },
-  // Üst kontroller — liste uzasa da boyutu değişmez
   topFixed: {
     flexShrink: 0,
   },
-  // FlatList kapsayıcı — kalan tüm boşluğu alır
   listWrapper: {
     flex: 1,
   },

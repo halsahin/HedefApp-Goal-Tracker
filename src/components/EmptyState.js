@@ -1,21 +1,18 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, Typography, Spacing, Radii } from '../constants/theme';
+import { useLanguage } from '../i18n/LanguageContext';
 
-/**
- * EmptyState — shown when the goal list is empty.
- * Mirrors <div class="empty-state">.
- */
 export default function EmptyState({ onAddPress }) {
+    const { t } = useLanguage();
+
     return (
         <View style={styles.container}>
             <Text style={styles.icon}>🎯</Text>
-            <Text style={styles.title}>Henüz hedef yok</Text>
-            <Text style={styles.desc}>
-                İlk hedefinizi eklemek için{'\n'}"Yeni Hedef" butonuna tıklayın.
-            </Text>
+            <Text style={styles.title}>{t('empty.title')}</Text>
+            <Text style={styles.desc}>{t('empty.desc')}</Text>
             <TouchableOpacity style={styles.btn} onPress={onAddPress} activeOpacity={0.8}>
-                <Text style={styles.btnText}>+ İlk Hedefinizi Ekleyin</Text>
+                <Text style={styles.btnText}>{t('empty.btn')}</Text>
             </TouchableOpacity>
         </View>
     );

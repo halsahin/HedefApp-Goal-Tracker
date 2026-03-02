@@ -14,19 +14,10 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors, Typography, Spacing, Radii, Shadows } from '../constants/theme';
-import { CATEGORIES, CATEGORY_MAP } from '../constants/categories';
+import { CATEGORIES, CATEGORY_MAP, getCategoryLabel } from '../constants/categories';
 import { calcRemainingDays, formatDate, deadlineFromDays } from '../utils/dateUtils';
+import { useLanguage } from '../i18n/LanguageContext';
 
-/**
- * GoalDetailModal — tam ekran detay + gelişim günlüğü.
- *
- * State mimarisi (bağımsız, çakışmaz):
- *   isEditingGoal  boolean  → ana hedef formu göster/gizle
- *   updateInput    object   → { mode: 'none'|'add'|'edit', id, text }
- *
- * Klavye güvenliği:
- *   KAV (behavior="padding") + ScrollView → her input klavyenin üstünde kalır.
- */
 export default function GoalDetailModal({
     goal,
     visible,
@@ -36,7 +27,8 @@ export default function GoalDetailModal({
     onEditUpdate,
     onDeleteUpdate,
 }) {
-    // ── Ana hedef düzenleme state'i ───────────────────────────
+    const { t, locale } = useLanguage();
+
     const [isEditingGoal, setIsEditingGoal] = useState(false);
     const [editName, setEditName] = useState('');
     const [editCategory, setEditCategory] = useState('');
@@ -46,13 +38,10 @@ export default function GoalDetailModal({
     const [editDesc, setEditDesc] = useState('');
     const [showDatePicker, setShowDatePicker] = useState(false);
 
-    // ── Güncelleme not state'i (ana hedeften tamamen bağımsız) ─
-    // mode: 'none' | 'add' | 'edit'
     const [updateInput, setUpdateInput] = useState({ mode: 'none', id: null, text: '' });
 
     const scrollRef = useRef(null);
 
-    // Modal açılınca her şeyi sıfırla
     useEffect(() => {
         if (visible && goal) {
             setIsEditingGoal(false);
@@ -71,7 +60,6 @@ export default function GoalDetailModal({
         setEditDesc(g.description || '');
     }
 
-    // ── Ana hedef kaydet ──────────────────────────────────────
     function saveGoalEdit() {
         if (!editName.trim()) return;
         let deadline;
@@ -97,7 +85,6 @@ export default function GoalDetailModal({
         Keyboard.dismiss();
     }
 
-    // ── Güncelleme not işlemleri ──────────────────────────────
     function openAddUpdate() {
         setUpdateInput({ mode: 'add', id: null, text: '' });
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
@@ -128,9 +115,9 @@ export default function GoalDetailModal({
     }
 
     function confirmDeleteUpdate(updateId) {
-        Alert.alert('Güncellemeyi sil', 'Bu notu silmek istiyor musunuz?', [
-            { text: 'İptal', style: 'cancel' },
-            { text: 'Sil', style: 'destructive', onPress: () => onDeleteUpdate(goal.id, updateId) },
+        Alert.alert(t('detail.deleteTitle'), t('detail.deleteMsg'), [
+            { text: t('detail.cancel'), style: 'cancel' },
+            { text: t('detail.delete'), style: 'destructive', onPress: () => onDeleteUpdate(goal.id, updateId) },
         ]);
     }
 
@@ -145,7 +132,7 @@ export default function GoalDetailModal({
             : overdue ? Colors.danger
                 : Colors.accent;
 
-    const formattedEditDate = editDate.toLocaleDateString('tr-TR', {
+    const formattedEditDate = editDate.toLocaleDateString(locale, {
         day: 'numeric', month: 'long', year: 'numeric',
     });
 
@@ -156,27 +143,21 @@ export default function GoalDetailModal({
             presentationStyle="pageSheet"
             onRequestClose={onClose}
         >
-            {/*
-        KAV tam ekranı kaplar (flex:1).
-        behavior="padding" → klavye açılınca KAV sıkışır, ScrollView içeriği kayar.
-        Bu Android Modal'ında her zaman çalışan en güvenilir yaklaşımdır.
-      */}
             <KeyboardAvoidingView
                 style={styles.root}
                 behavior="padding"
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
-                {/* ── Top bar ── */}
+                {/* Top bar */}
                 <View style={[styles.topBar, { borderBottomColor: stripColor }]}>
                     <TouchableOpacity onPress={onClose} style={styles.backBtn} activeOpacity={0.7}>
-                        <Text style={styles.backBtnText}>← Geri</Text>
+                        <Text style={styles.backBtnText}>{t('detail.back')}</Text>
                     </TouchableOpacity>
                     <Text style={styles.topBarTitle} numberOfLines={1}>{goal.name}</Text>
 
-                    {/* Sağ üst buton: Düzenle / İptal (YALNIZCA ana hedef için) */}
                     {isEditingGoal ? (
                         <TouchableOpacity style={styles.topActionBtn} onPress={cancelGoalEdit} activeOpacity={0.7}>
-                            <Text style={[styles.topActionBtnText, { color: Colors.textMuted }]}>İptal</Text>
+                            <Text style={[styles.topActionBtnText, { color: Colors.textMuted }]}>{t('detail.cancel')}</Text>
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity
@@ -184,12 +165,11 @@ export default function GoalDetailModal({
                             onPress={() => { populateEditForm(goal); setIsEditingGoal(true); }}
                             activeOpacity={0.7}
                         >
-                            <Text style={styles.topActionBtnText}>Düzenle</Text>
+                            <Text style={styles.topActionBtnText}>{t('detail.edit')}</Text>
                         </TouchableOpacity>
                     )}
                 </View>
 
-                {/* ── Kaydırılabilir içerik ── */}
                 <ScrollView
                     ref={scrollRef}
                     style={styles.scroll}
@@ -197,29 +177,25 @@ export default function GoalDetailModal({
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* ══════════════════════════════════════════
-              BÖLÜM 1 — Ana Hedef Bilgileri
-          ══════════════════════════════════════════ */}
                     <View style={styles.card}>
                         <View style={[styles.cardStrip, { backgroundColor: stripColor }]} />
                         <View style={styles.cardBody}>
 
                             {isEditingGoal ? (
-                                /* ── Düzenleme Formu ── */
                                 <>
-                                    <Text style={styles.formSectionTitle}>Ana Hedefi Düzenle</Text>
+                                    <Text style={styles.formSectionTitle}>{t('detail.editTitle')}</Text>
 
-                                    <Text style={styles.fieldLabel}>Hedef Adı *</Text>
+                                    <Text style={styles.fieldLabel}>{t('detail.goalName')}</Text>
                                     <TextInput
                                         style={styles.input}
                                         value={editName}
                                         onChangeText={setEditName}
-                                        placeholder="Hedef adı"
+                                        placeholder={t('detail.goalNamePlaceholder')}
                                         placeholderTextColor={Colors.textLight}
                                         maxLength={100}
                                     />
 
-                                    <Text style={styles.fieldLabel}>Kategori</Text>
+                                    <Text style={styles.fieldLabel}>{t('detail.category')}</Text>
                                     <ScrollView
                                         horizontal
                                         showsHorizontalScrollIndicator={false}
@@ -236,14 +212,14 @@ export default function GoalDetailModal({
                                                     activeOpacity={0.75}
                                                 >
                                                     <Text style={[styles.catChipText, active && styles.catChipTextActive]}>
-                                                        {cat.icon} {cat.label}
+                                                        {cat.icon} {t(`cat.${cat.key}`)}
                                                     </Text>
                                                 </TouchableOpacity>
                                             );
                                         })}
                                     </ScrollView>
 
-                                    <Text style={styles.fieldLabel}>Bitiş Tarihi</Text>
+                                    <Text style={styles.fieldLabel}>{t('detail.deadline')}</Text>
                                     <View style={styles.toggle}>
                                         {['date', 'days'].map(m => (
                                             <TouchableOpacity
@@ -253,7 +229,7 @@ export default function GoalDetailModal({
                                                 activeOpacity={0.8}
                                             >
                                                 <Text style={[styles.toggleBtnText, editDeadlineMode === m && styles.toggleBtnTextActive]}>
-                                                    {m === 'date' ? 'Tarih Seç' : 'Gün Say'}
+                                                    {m === 'date' ? t('detail.pickDate') : t('detail.countDays')}
                                                 </Text>
                                             </TouchableOpacity>
                                         ))}
@@ -288,23 +264,23 @@ export default function GoalDetailModal({
                                         <View style={styles.daysRow}>
                                             <TextInput
                                                 style={[styles.input, { flex: 1 }]}
-                                                placeholder="örn. 30"
+                                                placeholder={t('detail.exDays')}
                                                 placeholderTextColor={Colors.textLight}
                                                 value={editDays}
                                                 onChangeText={setEditDays}
                                                 keyboardType="numeric"
                                                 maxLength={4}
                                             />
-                                            <Text style={styles.daysUnit}>gün</Text>
+                                            <Text style={styles.daysUnit}>{t('detail.daysUnit')}</Text>
                                         </View>
                                     )}
 
-                                    <Text style={styles.fieldLabel}>Notlar (isteğe bağlı)</Text>
+                                    <Text style={styles.fieldLabel}>{t('detail.notesOptional')}</Text>
                                     <TextInput
                                         style={[styles.input, styles.textarea]}
                                         value={editDesc}
                                         onChangeText={setEditDesc}
-                                        placeholder="Kısa bir not..."
+                                        placeholder={t('detail.shortNote')}
                                         placeholderTextColor={Colors.textLight}
                                         multiline
                                         numberOfLines={3}
@@ -313,19 +289,20 @@ export default function GoalDetailModal({
                                     />
 
                                     <TouchableOpacity style={styles.saveBtn} onPress={saveGoalEdit} activeOpacity={0.8}>
-                                        <Text style={styles.saveBtnText}>✓ Kaydet</Text>
+                                        <Text style={styles.saveBtnText}>{t('detail.save')}</Text>
                                     </TouchableOpacity>
                                 </>
                             ) : (
-                                /* ── Salt Okunur Görünüm ── */
                                 <>
                                     <View style={styles.categoryRow}>
                                         <View style={styles.categoryBadge}>
-                                            <Text style={styles.categoryBadgeText}>{icon} {goal.category}</Text>
+                                            <Text style={styles.categoryBadgeText}>
+                                                {icon} {getCategoryLabel(goal.category, t)}
+                                            </Text>
                                         </View>
                                         {goal.completed && (
                                             <View style={styles.doneBadge}>
-                                                <Text style={styles.doneBadgeText}>✓ Tamamlandı</Text>
+                                                <Text style={styles.doneBadgeText}>{t('detail.completed')}</Text>
                                             </View>
                                         )}
                                     </View>
@@ -333,28 +310,28 @@ export default function GoalDetailModal({
                                     <Text style={styles.goalName}>{goal.name}</Text>
 
                                     <View style={styles.infoRow}>
-                                        <Text style={styles.infoLabel}>📅 Bitiş Tarihi</Text>
-                                        <Text style={styles.infoValue}>{formatDate(goal.deadline)}</Text>
+                                        <Text style={styles.infoLabel}>{t('detail.deadlineLabel')}</Text>
+                                        <Text style={styles.infoValue}>{formatDate(goal.deadline, locale)}</Text>
                                     </View>
 
                                     <View style={styles.infoRow}>
-                                        <Text style={styles.infoLabel}>⏳ Kalan</Text>
+                                        <Text style={styles.infoLabel}>{t('detail.remaining')}</Text>
                                         <Text style={[
                                             styles.infoValue,
                                             overdue && { color: Colors.danger },
                                             goal.completed && { color: Colors.success },
                                         ]}>
                                             {goal.completed
-                                                ? 'Tamamlandı'
+                                                ? t('detail.completedValue')
                                                 : overdue
-                                                    ? `${Math.abs(days)} gün geçti`
-                                                    : `${days} gün`}
+                                                    ? t('detail.daysAgo', { n: Math.abs(days) })
+                                                    : t('detail.daysLeft', { n: days })}
                                         </Text>
                                     </View>
 
                                     {!!goal.description && (
                                         <View style={styles.noteBox}>
-                                            <Text style={styles.noteLabel}>📝 NOTLAR</Text>
+                                            <Text style={styles.noteLabel}>{t('detail.notes')}</Text>
                                             <Text style={styles.noteText}>{goal.description}</Text>
                                         </View>
                                     )}
@@ -363,37 +340,31 @@ export default function GoalDetailModal({
                         </View>
                     </View>
 
-                    {/* ── Aksiyon butonu — sadece read-only modda görünür ── */}
                     {!isEditingGoal && (
                         <TouchableOpacity
                             style={styles.addUpdateBtn}
                             onPress={openAddUpdate}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.addUpdateBtnText}>+ Güncelleme Ekle</Text>
+                            <Text style={styles.addUpdateBtnText}>{t('detail.addUpdate')}</Text>
                         </TouchableOpacity>
                     )}
 
-                    {/* ══════════════════════════════════════════
-              BÖLÜM 2 — Gelişim Günlüğü
-              (Her modda görünür; ana hedef formu ile çakışmaz)
-          ══════════════════════════════════════════ */}
                     <Text style={styles.sectionTitle}>
-                        📋 Gelişim Günlüğü
+                        {t('detail.progressLog')}
                         {goal.updates?.length > 0 && (
                             <Text style={styles.sectionCount}> ({goal.updates.length})</Text>
                         )}
                     </Text>
 
-                    {/* Yeni güncelleme input kutusu */}
                     {updateInput.mode === 'add' && (
                         <View style={styles.updateInputCard}>
-                            <Text style={styles.updateInputLabel}>Yeni Not</Text>
+                            <Text style={styles.updateInputLabel}>{t('detail.newNote')}</Text>
                             <TextInput
                                 style={[styles.input, styles.textarea]}
                                 value={updateInput.text}
-                                onChangeText={t => setUpdateInput(prev => ({ ...prev, text: t }))}
-                                placeholder="Bugün ne yaptınız? (örn: 5km koştum)"
+                                onChangeText={txt => setUpdateInput(prev => ({ ...prev, text: txt }))}
+                                placeholder={t('detail.placeholder.update')}
                                 placeholderTextColor={Colors.textLight}
                                 multiline
                                 numberOfLines={3}
@@ -406,36 +377,34 @@ export default function GoalDetailModal({
                                     style={[styles.inputActionBtn, styles.inputActionBtnOutline]}
                                     onPress={cancelUpdateInput}
                                 >
-                                    <Text style={styles.inputActionBtnOutlineText}>İptal</Text>
+                                    <Text style={styles.inputActionBtnOutlineText}>{t('detail.cancel')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.inputActionBtn, styles.inputActionBtnFill]}
                                     onPress={saveAddUpdate}
                                 >
-                                    <Text style={styles.inputActionBtnFillText}>Kaydet</Text>
+                                    <Text style={styles.inputActionBtnFillText}>{t('detail.save2')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
                     )}
 
-                    {/* Mevcut güncellemeler listesi */}
                     {(!goal.updates || goal.updates.length === 0) && updateInput.mode !== 'add' ? (
                         <View style={styles.emptyUpdates}>
                             <Text style={styles.emptyUpdatesIcon}>📓</Text>
-                            <Text style={styles.emptyUpdatesText}>Henüz güncelleme yok.</Text>
-                            <Text style={styles.emptyUpdatesHint}>"Güncelleme Ekle" ile ilerlemenizi kaydedin.</Text>
+                            <Text style={styles.emptyUpdatesText}>{t('detail.emptyUpdates')}</Text>
+                            <Text style={styles.emptyUpdatesHint}>{t('detail.emptyHint')}</Text>
                         </View>
                     ) : (
                         (goal.updates || []).map(upd => (
                             <View key={upd.id}>
                                 {updateInput.mode === 'edit' && updateInput.id === upd.id ? (
-                                    /* ── Satır içi düzenleme kutusu ── */
                                     <View style={styles.updateInputCard}>
-                                        <Text style={styles.updateInputLabel}>Notu Düzenle</Text>
+                                        <Text style={styles.updateInputLabel}>{t('detail.editNote')}</Text>
                                         <TextInput
                                             style={[styles.input, styles.textarea]}
                                             value={updateInput.text}
-                                            onChangeText={t => setUpdateInput(prev => ({ ...prev, text: t }))}
+                                            onChangeText={txt => setUpdateInput(prev => ({ ...prev, text: txt }))}
                                             multiline
                                             numberOfLines={3}
                                             textAlignVertical="top"
@@ -447,18 +416,17 @@ export default function GoalDetailModal({
                                                 style={[styles.inputActionBtn, styles.inputActionBtnOutline]}
                                                 onPress={cancelUpdateInput}
                                             >
-                                                <Text style={styles.inputActionBtnOutlineText}>İptal</Text>
+                                                <Text style={styles.inputActionBtnOutlineText}>{t('detail.cancel')}</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 style={[styles.inputActionBtn, styles.inputActionBtnFill]}
                                                 onPress={saveEditUpdate}
                                             >
-                                                <Text style={styles.inputActionBtnFillText}>Güncelle</Text>
+                                                <Text style={styles.inputActionBtnFillText}>{t('detail.update')}</Text>
                                             </TouchableOpacity>
                                         </View>
                                     </View>
                                 ) : (
-                                    /* ── Güncelleme kartı ── */
                                     <TouchableOpacity
                                         style={styles.updateCard}
                                         onPress={() => openEditUpdate(upd)}
@@ -466,7 +434,7 @@ export default function GoalDetailModal({
                                     >
                                         <View style={styles.updateCardHeader}>
                                             <Text style={styles.updateDate}>
-                                                {new Date(upd.date).toLocaleDateString('tr-TR', {
+                                                {new Date(upd.date).toLocaleDateString(locale, {
                                                     day: 'numeric', month: 'long', year: 'numeric',
                                                 })}
                                             </Text>
@@ -478,7 +446,7 @@ export default function GoalDetailModal({
                                             </TouchableOpacity>
                                         </View>
                                         <Text style={styles.updateText}>{upd.text}</Text>
-                                        <Text style={styles.updateEditHint}>Düzenlemek için dokun</Text>
+                                        <Text style={styles.updateEditHint}>{t('detail.editHint')}</Text>
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -492,7 +460,6 @@ export default function GoalDetailModal({
     );
 }
 
-// ── Styles ──────────────────────────────────────────────────
 const styles = StyleSheet.create({
     root: {
         flex: 1,
@@ -541,7 +508,6 @@ const styles = StyleSheet.create({
         padding: Spacing.lg,
         paddingTop: Spacing.md,
     },
-    // ── Main card ───────────────────────────────────────────
     card: {
         backgroundColor: Colors.surface,
         borderRadius: Radii.lg,
@@ -553,7 +519,6 @@ const styles = StyleSheet.create({
     },
     cardStrip: { height: 4, width: '100%' },
     cardBody: { padding: Spacing.lg },
-    // read-only
     categoryRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -619,7 +584,6 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     noteText: { fontSize: Typography.sm, color: Colors.text, lineHeight: 20 },
-    // ── form fields ─────────────────────────────────────────
     formSectionTitle: {
         fontSize: Typography.sm,
         fontWeight: '700',
@@ -718,7 +682,6 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     saveBtnText: { fontSize: Typography.base - 1, fontWeight: '700', color: '#5A4800' },
-    // ── Add update button ─────────────────────────────────────
     addUpdateBtn: {
         backgroundColor: Colors.accent,
         paddingVertical: Spacing.sm + 4,
@@ -732,7 +695,6 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     addUpdateBtnText: { fontSize: Typography.base - 1, fontWeight: '700', color: '#5A4800' },
-    // ── Section title ─────────────────────────────────────────
     sectionTitle: {
         fontSize: Typography.base,
         fontWeight: '700',
@@ -740,7 +702,6 @@ const styles = StyleSheet.create({
         marginBottom: Spacing.md,
     },
     sectionCount: { fontWeight: '400', color: Colors.textMuted },
-    // ── Empty state ───────────────────────────────────────────
     emptyUpdates: {
         alignItems: 'center',
         paddingVertical: Spacing.xl,
@@ -753,7 +714,6 @@ const styles = StyleSheet.create({
     emptyUpdatesIcon: { fontSize: 32, marginBottom: Spacing.sm },
     emptyUpdatesText: { fontSize: Typography.sm, fontWeight: '600', color: Colors.textMuted },
     emptyUpdatesHint: { fontSize: Typography.xs, color: Colors.textLight, marginTop: 4 },
-    // ── Update input card ─────────────────────────────────────
     updateInputCard: {
         backgroundColor: Colors.surface,
         borderRadius: Radii.md,
@@ -794,7 +754,6 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     inputActionBtnFillText: { fontSize: Typography.sm, fontWeight: '700', color: '#5A4800' },
-    // ── Update card ───────────────────────────────────────────
     updateCard: {
         backgroundColor: Colors.surface,
         borderRadius: Radii.md,
