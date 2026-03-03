@@ -6,13 +6,17 @@ A minimalist React Native app for tracking personal goals. Create goals with cat
 
 ## Screenshots
 
-> Place your screenshots inside an `assets/screenshots/` folder, then reference them like this:
-
-```md
-![Home Screen](assets/screenshots/home.png)
-![Add Goal](assets/screenshots/add-goal.png)
-![Goal Detail](assets/screenshots/detail.png)
-```
+<p align="center">
+  <img src="assets/screenshots/1.jpeg" width="23%" />
+  <img src="assets/screenshots/2.jpeg" width="23%" />
+  <img src="assets/screenshots/3.jpeg" width="23%" />
+  <img src="assets/screenshots/4.jpeg" width="23%" />
+</p>
+<p align="center">
+  <img src="assets/screenshots/5.jpeg" width="23%" />
+  <img src="assets/screenshots/6.jpeg" width="23%" />
+  <img src="assets/screenshots/7.jpeg" width="23%" />
+</p>
 
 ---
 
