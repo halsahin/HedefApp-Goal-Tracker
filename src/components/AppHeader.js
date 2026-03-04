@@ -1,45 +1,73 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
-import { Colors, Typography, Spacing, Radii } from '../constants/theme';
+import { Typography, Spacing, Radii } from '../constants/theme';
 import { useLanguage, LANGUAGES } from '../i18n/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
 
-export default function AppHeader({ totalCount, dueCount }) {
+export default function AppHeader({ totalCount, dueCount, onStatsPress, onCalendarPress }) {
     const { t, language, setLanguage } = useLanguage();
+    const { colors, themeMode, setThemeMode, isDark } = useTheme();
     const [langPickerVisible, setLangPickerVisible] = useState(false);
 
     const currentLang = LANGUAGES.find(l => l.code === language);
 
+    const themeIcon =
+        themeMode === 'system' ? '⚙️' :
+        isDark ? '🌙' : '☀️';
+
+    const cycleTheme = () => {
+        const next =
+            themeMode === 'system' ? 'light' :
+            themeMode === 'light'  ? 'dark'  : 'system';
+        setThemeMode(next);
+    };
+
     return (
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
             <View style={styles.logo}>
-                <Text style={styles.logoIcon}>✦</Text>
-                <Text style={styles.logoText}>{t('header.title')}</Text>
+                <Text style={[styles.logoIcon, { color: colors.accentDark }]}>✦</Text>
+                <Text style={[styles.logoText, { color: colors.text }]}>{t('header.title')}</Text>
             </View>
 
             <View style={styles.right}>
                 <View style={styles.badges}>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{t('header.goals', { n: totalCount })}</Text>
+                    <View style={[styles.badge, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
+                        <Text style={[styles.badgeText, { color: colors.textMuted }]}>
+                            {t('header.goals', { n: totalCount })}
+                        </Text>
                     </View>
                     {dueCount > 0 && (
-                        <View style={[styles.badge, styles.badgeAccent]}>
-                            <Text style={[styles.badgeText, styles.badgeTextAccent]}>
+                        <View style={[styles.badge, styles.badgeAccent, { backgroundColor: colors.accentBg, borderColor: colors.accent }]}>
+                            <Text style={[styles.badgeText, { color: '#8A7200' }]}>
                                 {t('header.upcoming', { n: dueCount })}
                             </Text>
                         </View>
                     )}
                 </View>
 
+                <TouchableOpacity style={styles.iconBtn} onPress={onStatsPress} activeOpacity={0.75}>
+                    <Text style={styles.iconBtnText}>📊</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.iconBtn} onPress={onCalendarPress} activeOpacity={0.75}>
+                    <Text style={styles.iconBtnText}>📅</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.iconBtn} onPress={cycleTheme} activeOpacity={0.75}>
+                    <Text style={styles.iconBtnText}>{themeIcon}</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
-                    style={styles.langBtn}
+                    style={[styles.langBtn, { backgroundColor: colors.bg, borderColor: colors.border }]}
                     onPress={() => setLangPickerVisible(true)}
                     activeOpacity={0.75}
                 >
-                    <Text style={styles.langBtnText}>{currentLang?.flag} {currentLang?.code.toUpperCase()}</Text>
+                    <Text style={[styles.langBtnText, { color: colors.textMuted }]}>
+                        {currentLang?.flag} {currentLang?.code.toUpperCase()}
+                    </Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Dil seçici modal */}
             <Modal
                 visible={langPickerVisible}
                 transparent
@@ -51,19 +79,28 @@ export default function AppHeader({ totalCount, dueCount }) {
                     activeOpacity={1}
                     onPress={() => setLangPickerVisible(false)}
                 />
-                <View style={styles.picker}>
+                <View style={[styles.picker, {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                }]}>
                     {LANGUAGES.map(lang => (
                         <TouchableOpacity
                             key={lang.code}
-                            style={[styles.langOption, language === lang.code && styles.langOptionActive]}
+                            style={[styles.langOption,
+                                language === lang.code && { backgroundColor: colors.accentBg }
+                            ]}
                             onPress={() => { setLanguage(lang.code); setLangPickerVisible(false); }}
                             activeOpacity={0.75}
                         >
                             <Text style={styles.langOptionFlag}>{lang.flag}</Text>
-                            <Text style={[styles.langOptionLabel, language === lang.code && styles.langOptionLabelActive]}>
+                            <Text style={[styles.langOptionLabel, { color: colors.text },
+                                language === lang.code && { fontWeight: '700', color: '#5A4800' }
+                            ]}>
                                 {lang.label}
                             </Text>
-                            {language === lang.code && <Text style={styles.checkmark}>✓</Text>}
+                            {language === lang.code && (
+                                <Text style={[styles.checkmark, { color: colors.accentDark }]}>✓</Text>
+                            )}
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -74,9 +111,7 @@ export default function AppHeader({ totalCount, dueCount }) {
 
 const styles = StyleSheet.create({
     header: {
-        backgroundColor: Colors.surface,
         borderBottomWidth: 1,
-        borderBottomColor: Colors.border,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -88,14 +123,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: Spacing.xs,
     },
-    logoIcon: {
-        fontSize: 16,
-        color: Colors.accentDark,
-    },
+    logoIcon: { fontSize: 16 },
     logoText: {
         fontSize: Typography.md,
         fontWeight: '700',
-        color: Colors.text,
         letterSpacing: -0.3,
     },
     right: {
@@ -109,38 +140,33 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     badge: {
-        backgroundColor: Colors.surface2,
         borderWidth: 1,
-        borderColor: Colors.border,
         borderRadius: Radii.full,
         paddingHorizontal: Spacing.sm + 2,
         paddingVertical: 3,
     },
-    badgeAccent: {
-        backgroundColor: Colors.accentBg,
-        borderColor: Colors.accent,
-    },
+    badgeAccent: {},
     badgeText: {
         fontSize: Typography.xs,
         fontWeight: '600',
-        color: Colors.textMuted,
     },
-    badgeTextAccent: {
-        color: '#8A7200',
+    iconBtn: {
+        width: 30,
+        height: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
+    iconBtnText: { fontSize: 16 },
     langBtn: {
-        backgroundColor: Colors.bg,
         borderWidth: 1,
-        borderColor: Colors.border,
         borderRadius: Radii.sm,
         paddingHorizontal: Spacing.sm,
         paddingVertical: 4,
-        marginLeft: 4,
+        marginLeft: 2,
     },
     langBtnText: {
         fontSize: Typography.xs,
         fontWeight: '700',
-        color: Colors.textMuted,
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,
@@ -150,10 +176,8 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 72,
         right: Spacing.lg,
-        backgroundColor: Colors.surface,
         borderRadius: Radii.md,
         borderWidth: 1,
-        borderColor: Colors.border,
         minWidth: 160,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -169,25 +193,14 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.sm + 2,
         gap: Spacing.sm,
     },
-    langOptionActive: {
-        backgroundColor: Colors.accentBg,
-    },
-    langOptionFlag: {
-        fontSize: 18,
-    },
+    langOptionFlag: { fontSize: 18 },
     langOptionLabel: {
         flex: 1,
         fontSize: Typography.sm,
         fontWeight: '500',
-        color: Colors.text,
-    },
-    langOptionLabelActive: {
-        fontWeight: '700',
-        color: '#5A4800',
     },
     checkmark: {
         fontSize: Typography.sm,
         fontWeight: '700',
-        color: Colors.accentDark,
     },
 });

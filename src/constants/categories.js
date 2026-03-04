@@ -1,21 +1,29 @@
 export const CATEGORIES = [
-    { key: 'personal', label: 'Kişisel', icon: '🌱' },
-    { key: 'career', label: 'Kariyer', icon: '💼' },
-    { key: 'health', label: 'Sağlık', icon: '💪' },
-    { key: 'education', label: 'Eğitim', icon: '📚' },
-    { key: 'finance', label: 'Finans', icon: '💰' },
+    { key: 'personal',      label: 'Kişisel',   icon: '🌱' },
+    { key: 'career',        label: 'Kariyer',   icon: '💼' },
+    { key: 'health',        label: 'Sağlık',    icon: '💪' },
+    { key: 'education',     label: 'Eğitim',    icon: '📚' },
+    { key: 'finance',       label: 'Finans',    icon: '💰' },
     { key: 'relationships', label: 'İlişkiler', icon: '❤️' },
-    { key: 'hobby', label: 'Hobi', icon: '🎨' },
-    { key: 'other', label: 'Diğer', icon: '📌' },
+    { key: 'hobby',         label: 'Hobi',      icon: '🎨' },
+    { key: 'other',         label: 'Diğer',     icon: '📌' },
 ];
 
-export const CATEGORY_MAP = Object.fromEntries(
-    CATEGORIES.map(c => [c.label, c.icon])
+// key → icon  (used in GoalCard, GoalDetailModal)
+export const CATEGORY_ICON_MAP = Object.fromEntries(
+    CATEGORIES.map(c => [c.key, c.icon])
 );
 
-// AsyncStorage'da Türkçe label saklandığından, display için çeviri fonksiyonu
-export function getCategoryLabel(turkishLabel, t) {
-    const cat = CATEGORIES.find(c => c.label === turkishLabel);
-    if (!cat) return turkishLabel;
-    return t(`cat.${cat.key}`);
+// Turkish label → key  (used ONLY during AsyncStorage v1→v2 migration)
+export const TURKISH_LABEL_TO_KEY = Object.fromEntries(
+    CATEGORIES.map(c => [c.label, c.key])
+);
+
+// key → translated label  (used everywhere for display)
+export function getCategoryLabel(key, t) {
+    // Migration fallback: if stored value is a Turkish label, remap to key first
+    if (TURKISH_LABEL_TO_KEY[key]) {
+        return t(`cat.${TURKISH_LABEL_TO_KEY[key]}`);
+    }
+    return t(`cat.${key}`) ?? key;
 }

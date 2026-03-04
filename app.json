@@ -5,8 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -30,10 +30,10 @@
     },
     "plugins": [
       [
-        "react-native-google-mobile-ads",
+        "expo-notifications",
         {
-          "androidAppId": "ca-app-pub-8186708468552371~4095592715",
-          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+          "icon": "./assets/icon.png",
+          "color": "#F9E55A"
         }
       ]
     ],

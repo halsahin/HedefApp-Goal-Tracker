@@ -1,19 +1,19 @@
 import React from 'react';
-import {
-    View, Text, TouchableOpacity, StyleSheet, ScrollView,
-} from 'react-native';
-import { Colors, Typography, Spacing, Radii } from '../constants/theme';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { Typography, Spacing, Radii } from '../constants/theme';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 const FILTER_KEYS = [
-    { key: 'all', tKey: 'filter.all' },
-    { key: 'active', tKey: 'filter.active' },
+    { key: 'all',       tKey: 'filter.all' },
+    { key: 'active',    tKey: 'filter.active' },
     { key: 'completed', tKey: 'filter.completed' },
-    { key: 'pinned', tKey: 'filter.pinned' },
+    { key: 'pinned',    tKey: 'filter.pinned' },
 ];
 
 export default function FilterTabs({ filterBy, onFilterChange }) {
     const { t } = useLanguage();
+    const { colors } = useTheme();
 
     return (
         <ScrollView
@@ -21,7 +21,7 @@ export default function FilterTabs({ filterBy, onFilterChange }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
         >
-            <View style={styles.tabGroup}>
+            <View style={[styles.tabGroup, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 {FILTER_KEYS.map(f => {
                     const active = filterBy === f.key;
                     return (
@@ -31,7 +31,9 @@ export default function FilterTabs({ filterBy, onFilterChange }) {
                             onPress={() => onFilterChange(f.key)}
                             activeOpacity={0.75}
                         >
-                            <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                            <Text style={[styles.tabText, { color: colors.textMuted },
+                                active && { fontWeight: '700', color: '#5A4800' }
+                            ]}>
                                 {t(f.tKey)}
                             </Text>
                         </TouchableOpacity>
@@ -53,9 +55,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         alignSelf: 'flex-start',
         gap: Spacing.xs,
-        backgroundColor: Colors.surface,
         borderWidth: 1,
-        borderColor: Colors.border,
         borderRadius: Radii.md,
         padding: 4,
     },
@@ -64,17 +64,6 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         borderRadius: Radii.sm,
     },
-    tabActive: {
-        backgroundColor: Colors.accent,
-    },
-    tabText: {
-        fontSize: Typography.sm,
-        fontWeight: '500',
-        color: Colors.textMuted,
-        lineHeight: 18,
-    },
-    tabTextActive: {
-        fontWeight: '700',
-        color: '#5A4800',
-    },
+    tabActive: { backgroundColor: '#F9E55A' },
+    tabText: { fontSize: Typography.sm, fontWeight: '500', lineHeight: 18 },
 });

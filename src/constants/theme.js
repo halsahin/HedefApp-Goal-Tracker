@@ -1,9 +1,4 @@
-// ──────────────────────────────────────────────
-// Theme — mirrors the CSS custom properties
-// from the web app 1:1
-// ──────────────────────────────────────────────
-
-export const Colors = {
+export const LightColors = {
     bg: '#F4F4F6',
     surface: '#FFFFFF',
     surface2: '#F9F9FB',
@@ -28,8 +23,35 @@ export const Colors = {
     pinnedBorder: '#E8D870',
 };
 
+export const DarkColors = {
+    bg: '#0F0F1A',
+    surface: '#1A1A2E',
+    surface2: '#22223A',
+    border: '#2E2E4E',
+    borderSoft: '#252540',
+
+    text: '#E8E8F4',
+    textMuted: '#9898B8',
+    textLight: '#5A5A7A',
+
+    accent: '#F9E55A',
+    accentDark: '#E0C828',
+    accentBg: '#2A2510',
+    accentGlow: 'rgba(249,229,90,0.15)',
+
+    danger: '#FF7A7A',
+    dangerSoft: '#2A1515',
+    success: '#5DBF72',
+    successSoft: '#142014',
+
+    pinned: '#2A2410',
+    pinnedBorder: '#6A5E20',
+};
+
+// Backward-compat alias — components still import Colors from theme.js
+export const Colors = LightColors;
+
 export const Typography = {
-    // Inter is loaded via expo-font; fallback to system sans-serif
     fontFamily: 'Inter_400Regular',
     fontFamilyMedium: 'Inter_500Medium',
     fontFamilySemiBold: 'Inter_600SemiBold',

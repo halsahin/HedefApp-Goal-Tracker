@@ -13,8 +13,8 @@ export function todayMidnight() {
  * Negative = overdue.
  */
 export function calcRemainingDays(deadline) {
-    const diff = new Date(deadline + 'T12:00:00') - todayMidnight();
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    const diff = new Date(deadline + 'T00:00:00') - todayMidnight();
+    return Math.round(diff / (1000 * 60 * 60 * 24));
 }
 
 /**

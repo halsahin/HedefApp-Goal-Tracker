@@ -1,24 +1,33 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, StatusBar, FlatList,
+  View, StatusBar as RNStatusBar, FlatList,
   StyleSheet, Platform,
 } from 'react-native';
 
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { LanguageProvider, useLanguage } from './src/i18n/LanguageContext';
 import { useGoals } from './src/hooks/useGoals';
 import AppHeader from './src/components/AppHeader';
 import ControlsBar from './src/components/ControlsBar';
 import FilterTabs from './src/components/FilterTabs';
+import SearchBar from './src/components/SearchBar';
 import GoalCard from './src/components/GoalCard';
 import EmptyState from './src/components/EmptyState';
 import AddGoalModal from './src/components/AddGoalModal';
 import GoalDetailModal from './src/components/GoalDetailModal';
+import StatsModal from './src/components/StatsModal';
+import CalendarModal from './src/components/CalendarModal';
 import Toast from './src/components/Toast';
 import AdBannerComponent from './src/components/AdBannerComponent';
-import { Colors } from './src/constants/theme';
-import { LanguageProvider, useLanguage } from './src/i18n/LanguageContext';
+import {
+  setupNotifications,
+  scheduleGoalNotifications,
+  cancelGoalNotifications,
+} from './src/utils/notifications';
 
 function AppContent() {
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
 
   const {
     goals,
@@ -26,6 +35,7 @@ function AppContent() {
     loaded,
     sortBy, setSortBy,
     filterBy, setFilterBy,
+    searchQuery, setSearchQuery,
     addGoal,
     updateGoal,
     toggleComplete,
@@ -34,32 +44,40 @@ function AppContent() {
     addUpdate,
     editUpdate,
     deleteUpdate,
+    addSubtask,
+    toggleSubtask,
+    deleteSubtask,
     totalCount,
     dueCount,
   } = useGoals();
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [detailGoalId, setDetailGoalId] = useState(null);
+  const [statsVisible, setStatsVisible] = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
 
   const rawGoalsRef = useRef(rawGoals);
   useEffect(() => { rawGoalsRef.current = rawGoals; }, [rawGoals]);
 
+  // Request notification permissions once on mount
+  useEffect(() => { setupNotifications(); }, []);
+
   const detailGoal = detailGoalId
     ? rawGoals.find(g => g.id === detailGoalId) ?? null
     : null;
 
-  const showToast = useCallback((msg) => {
-    setToastMsg(msg);
-  }, []);
+  const showToast = useCallback((msg) => setToastMsg(msg), []);
 
   const handleAddGoal = useCallback((data) => {
-    addGoal(data);
+    const newGoal = addGoal(data);
+    scheduleGoalNotifications(newGoal, t);
     showToast(t('toast.goalAdded'));
   }, [addGoal, showToast, t]);
 
   const handleToggleComplete = useCallback((id) => {
     const g = rawGoalsRef.current.find(x => x.id === id);
+    cancelGoalNotifications(id);
     toggleComplete(id);
     showToast(g?.completed ? t('toast.undone') : t('toast.goalCompleted'));
   }, [toggleComplete, showToast, t]);
@@ -71,12 +89,15 @@ function AppContent() {
   }, [togglePin, showToast, t]);
 
   const handleDelete = useCallback((id) => {
+    cancelGoalNotifications(id);
     deleteGoal(id);
     showToast(t('toast.goalDeleted'));
   }, [deleteGoal, showToast, t]);
 
   const handleUpdateGoal = useCallback((id, data) => {
     updateGoal(id, data);
+    const existing = rawGoalsRef.current.find(g => g.id === id);
+    if (existing) scheduleGoalNotifications({ ...existing, ...data }, t);
     showToast(t('toast.goalUpdated'));
   }, [updateGoal, showToast, t]);
 
@@ -110,20 +131,26 @@ function AppContent() {
   if (!loaded) return null;
 
   return (
-    <View style={styles.root}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={Colors.surface}
+    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+      <RNStatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.surface}
         translucent={false}
       />
 
       <View style={styles.topFixed}>
-        <AppHeader totalCount={totalCount} dueCount={dueCount} />
+        <AppHeader
+          totalCount={totalCount}
+          dueCount={dueCount}
+          onStatsPress={() => setStatsVisible(true)}
+          onCalendarPress={() => setCalendarVisible(true)}
+        />
         <ControlsBar
           sortBy={sortBy}
           onSortChange={setSortBy}
           onAddPress={() => setAddModalVisible(true)}
         />
+        <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
         <FilterTabs filterBy={filterBy} onFilterChange={setFilterBy} />
       </View>
 
@@ -157,6 +184,21 @@ function AppContent() {
         onAddUpdate={handleAddUpdate}
         onEditUpdate={handleEditUpdate}
         onDeleteUpdate={handleDeleteUpdate}
+        onAddSubtask={addSubtask}
+        onToggleSubtask={toggleSubtask}
+        onDeleteSubtask={deleteSubtask}
+      />
+
+      <StatsModal
+        visible={statsVisible}
+        onClose={() => setStatsVisible(false)}
+        goals={rawGoals}
+      />
+
+      <CalendarModal
+        visible={calendarVisible}
+        onClose={() => setCalendarVisible(false)}
+        goals={rawGoals}
       />
 
       <Toast message={toastMsg} onHide={() => setToastMsg(null)} />
@@ -166,17 +208,18 @@ function AppContent() {
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <AppContent />
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.bg,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 44,
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 44,
   },
   topFixed: {
     flexShrink: 0,

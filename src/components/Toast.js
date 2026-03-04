@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Text, StyleSheet } from 'react-native';
-import { Colors, Typography, Spacing, Radii } from '../constants/theme';
+import { Typography, Spacing, Radii } from '../constants/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 /**
  * Toast — animated notification that slides up from bottom and auto-hides.
@@ -10,6 +11,7 @@ import { Colors, Typography, Spacing, Radii } from '../constants/theme';
  * value the toast shows; parent can clear it with onHide callback.
  */
 export default function Toast({ message, onHide }) {
+    const { colors, isDark } = useTheme();
     const translateY = useRef(new Animated.Value(80)).current;
     const opacity = useRef(new Animated.Value(0)).current;
     const timerRef = useRef(null);
@@ -68,11 +70,15 @@ export default function Toast({ message, onHide }) {
         <Animated.View
             style={[
                 styles.toast,
-                { transform: [{ translateY }], opacity },
+                {
+                    backgroundColor: colors.text,
+                    transform: [{ translateY }],
+                    opacity,
+                },
             ]}
             pointerEvents="none"
         >
-            <Text style={styles.text}>{message}</Text>
+            <Text style={[styles.text, { color: isDark ? '#0F0F1A' : '#FFFFFF' }]}>{message}</Text>
         </Animated.View>
     );
 }
@@ -80,16 +86,14 @@ export default function Toast({ message, onHide }) {
 const styles = StyleSheet.create({
     toast: {
         position: 'absolute',
-        bottom: 90,   // above the AdBannerComponent
+        bottom: 90,
         alignSelf: 'center',
-        backgroundColor: Colors.text,
         paddingHorizontal: Spacing.lg,
         paddingVertical: Spacing.sm + 2,
         borderRadius: Radii.full,
         maxWidth: '85%',
     },
     text: {
-        color: '#fff',
         fontSize: Typography.sm,
         fontWeight: '500',
         textAlign: 'center',
