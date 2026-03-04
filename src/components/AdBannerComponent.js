@@ -29,7 +29,7 @@ try {
  *      konsoldan aldığınız gerçek Ad Unit ID'leriyle değiştirin.
  *   3. app.json'daki androidAppId / iosAppId alanlarını da güncelleyin.
  */
-const { ANDROID_AD_UNIT_ID } = require('../config/ads');
+const ANDROID_AD_UNIT_ID = process.env.ANDROID_AD_UNIT_ID ?? 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX';
 const IOS_AD_UNIT_ID = TestIds ? TestIds.ADAPTIVE_BANNER : null;
 
 const AD_UNIT_ID = Platform.OS === 'android' ? ANDROID_AD_UNIT_ID : IOS_AD_UNIT_ID;
