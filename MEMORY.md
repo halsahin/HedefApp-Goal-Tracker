@@ -37,10 +37,21 @@ Bu dosya, Antigravity CLI tarafından projenin gelişim sürecini, yapılan değ
    - *Sorun:* Play Store için App Bundle derlendiğinde uygulamanın açılır açılmaz çökmesi (NoSuchMethodError - ReturnTypeKt) ve .gitignore sebebiyle reklam ID'lerinin bulut derlemesine gitmemesi. Ayrıca `.gitignore` dosyasında `android/` klasörü ignore edildiği için yerel proguard ayarları EAS tarafından yoksayılıyordu.
    - *Çözüm:* `app.config.js` dosyasına `expo-build-properties` eklendi ve `extraProguardRules` içerisine hem Expo Kotlin modüllerini (expo.modules.**, kotlin.**) hem de Google Mobile Ads (com.google.**) sınıflarını koruyan proguard kuralları inject edildi. Ayrıca `app.config.js` ortam değişkenlerini (EAS Secrets) okuyacak şekilde güncellendi ve App.js içerisine eksik olan `mobileAds().initialize()` eklendi.
 
+7. **Play Store Çökme Sorunu (Expo SDK Uyumsuzluğu):**
+   - *Sorun:* Güncelleme sonrası `expo-font` sürümü ile `expo` core arasındaki uyumsuzluktan dolayı (`java.lang.NoSuchMethodError: No static method getDirectConverter`) uygulamanın açılışta çökmesi.
+   - *Çözüm:* `app.config.js` dosyasına `expo-font` dinamik olarak eklendi, `npx expo install --fix` ile tüm paketler SDK 54 ile uyumlu güvenli sürümlere çekildi ve sürüm `1.3.3` (versiyon kodu 8) olarak güncellendi.
+8. **Google Drive Senkronizasyon (Üretim/Play Store) Sorunu:**
+   - *Sorun:* Google Drive'dan veri çekerken/yüklerken production uygulamasında hata vermesi.
+   - *Çözüm:* Google Play App Signing sebebiyle uygulamanın üretimde farklı bir SHA-1 anahtarına sahip olmasıdır. Yeni SHA-1 şifresi Google Play Console'da artık şu yeni menü altında bulunur: **Google Play ile korunanlar > Google Play Store dağıtımı > Google Play Uygulama İmzalama'ya git**. Buradan alınan SHA-1, Google Cloud Console'da OAuth 2.0 Client ID (Android) mevcuttur.
+
+9. **Firebase Real-Time Analytics Entegrasyonu:**
+   - *Tanım:* Canlı aktif kullanıcı takibi, ekran görüntüleme ve hedef işlemleri istatistikleri için Firebase Analytics entegre edildi.
+   - *Çözüm:* `@react-native-firebase/app` ve `@react-native-firebase/analytics` paketleri yüklendi. `google-services.json` konfigürasyonu `app.config.js` dosyasına eklendi ve Proguard koruma kuralları güncellendi. `src/utils/analytics.js` ile canlı `app_open`, `add_goal`, `complete_goal`, `delete_goal` event'leri bağlandı.
+
 ## 🚀 Play Store Süreci
-- Versiyon (Version): `1.3.0`
-- Versiyon Kodu (VersionCode): `6` (Derleme hatası sebebiyle 5 iptal edilip 6'ya geçildi)
-- Derleme Komutu: `eas build -p android --profile production`
+- Son Güncelleme Versiyonu (Version): `1.3.4`
+- Versiyon Kodu (VersionCode): `9` 
+- Derleme Komutu: `eas build -p android --clear-cache`
 
 ## 📝 Sonraki Oturum İçin Notlar (Future Roadmap)
 - Uygulama şu anda tamamen stabil çalışıyor. Herhangi bir yeni özellik eklendiğinde veya UI değiştirildiğinde **mutlaka Feather icons kullanılmasına** ve **AsyncStorage key'lerinin (goaltracker_v2 vs) doğru girilmesine** dikkat edilmeli.

@@ -44,3 +44,8 @@ yarn-error.*
 
 # secrets
 src/config/ads.js
+
+# secrets / logs
+google-services.json
+GoogleService-Info.plist
+expo-log.txt

@@ -2,7 +2,7 @@
 
 > **Proje:** HedefApp — Minimalist Hedef Takip Uygulaması  
 > **Platform:** React Native + Expo (iOS & Android)  
-> **Versiyon:** 1.2.1 (versionCode: 4)  
+> **Versiyon:** 1.3.5 (versionCode: 10)  
 > **Bundle ID:** `com.r1cha.hedefApp`
 
 ---

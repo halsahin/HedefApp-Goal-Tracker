@@ -36,7 +36,11 @@ function createNextInstance(goal) {
         type === 'monthly' ? 30 :
         (Number(interval) || 7);
     base.setDate(base.getDate() + daysToAdd);
-    const newDeadline = base.toISOString().slice(0, 10);
+    const newDeadline = [
+        base.getFullYear(),
+        String(base.getMonth() + 1).padStart(2, '0'),
+        String(base.getDate()).padStart(2, '0'),
+    ].join('-');
     return {
         ...goal,
         id: generateId(),
@@ -57,6 +61,8 @@ export function useGoals(activeFolderId = null) {
     const [filterBy, setFilterBy] = useState('active');
     const [searchQuery, setSearchQuery] = useState('');
     const [loaded, setLoaded] = useState(false);
+    const goalsRef = useRef(goals);
+    goalsRef.current = goals;
 
     // ── Load + migrate from AsyncStorage on mount ──────────────
     useEffect(() => {
@@ -64,7 +70,13 @@ export function useGoals(activeFolderId = null) {
             try {
                 let raw = await AsyncStorage.getItem(STORAGE_KEY_V2);
                 if (raw) {
-                    setGoals(JSON.parse(raw).map(normaliseGoal));
+                    try {
+                        setGoals(JSON.parse(raw).map(normaliseGoal));
+                    } catch (parseErr) {
+                        // Bozuk veri bir sonraki kayıtta ezilmesin diye ham kopyayı sakla
+                        await AsyncStorage.setItem(STORAGE_KEY_V2 + '_corrupt', raw).catch(() => {});
+                        console.error('[useGoals] corrupt data preserved:', parseErr);
+                    }
                     return;
                 }
                 raw = await AsyncStorage.getItem(STORAGE_KEY_V1);
@@ -126,16 +138,16 @@ export function useGoals(activeFolderId = null) {
 
     // Returns new recurring instance if created, else null
     const toggleComplete = useCallback((id) => {
-        let newGoal = null;
+        // State updater'ı React'in zamanlamasına bağlı olduğundan sonucu dışarıda hesapla
+        const goal = goalsRef.current.find(g => g.id === id);
+        if (!goal) return null;
+        const nowCompleted = !goal.completed;
+        const newGoal = nowCompleted && goal.recurring ? createNextInstance(goal) : null;
         setGoals(prev => {
-            const goal = prev.find(g => g.id === id);
-            if (!goal) return prev;
-            const nowCompleted = !goal.completed;
             let updated = prev.map(g =>
                 g.id === id ? { ...g, completed: nowCompleted } : g
             );
-            if (nowCompleted && goal.recurring) {
-                newGoal = createNextInstance(goal);
+            if (newGoal && !updated.some(g => g.id === newGoal.id)) {
                 updated = [newGoal, ...updated];
             }
             return updated;

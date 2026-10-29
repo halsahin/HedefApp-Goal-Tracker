@@ -29,7 +29,7 @@ export function useFolders() {
                 } catch { /* ignore */ }
             }
             setLoaded(true);
-        });
+        }).catch(() => setLoaded(true));
     }, []);
 
     const isFirstRender = useRef(true);

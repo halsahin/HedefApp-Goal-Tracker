@@ -19,7 +19,7 @@ module.exports = {
     expo: {
         name: "HedefApp",
         slug: "hedefapp",
-        version: "1.3.3",
+        version: "1.3.5",
         orientation: "portrait",
         icon: "./assets/icon.png",
         userInterfaceStyle: "automatic",
@@ -40,8 +40,9 @@ module.exports = {
             },
             edgeToEdgeEnabled: true,
             package: "com.r1cha.hedefApp",
-            versionCode: 8,
-            allowBackup: true
+            versionCode: 10,
+            allowBackup: true,
+            googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json"
         },
         web: {
             favicon: "./assets/favicon.png"
@@ -49,6 +50,8 @@ module.exports = {
         plugins: [
             "expo-font",
             "@react-native-community/datetimepicker",
+            "@react-native-firebase/app",
+            "@react-native-firebase/analytics",
             [
                 "expo-notifications",
                 {
@@ -75,7 +78,7 @@ module.exports = {
                 "expo-build-properties",
                 {
                     "android": {
-                        "extraProguardRules": "-keep class expo.modules.** { *; }\n-keep class kotlin.Metadata { *; }\n-keep class kotlin.reflect.** { *; }\n-keep class com.google.android.gms.internal.consent_sdk.** { *; }\n-keep class com.google.android.gms.ads.** { *; }\n-keep interface com.google.android.gms.ads.** { *; }\n-keep class com.google.ads.mediation.** { *; }"
+                        "extraProguardRules": "-keep class expo.modules.** { *; }\n-keep class kotlin.Metadata { *; }\n-keep class kotlin.reflect.** { *; }\n-keep class com.google.android.gms.internal.consent_sdk.** { *; }\n-keep class com.google.android.gms.ads.** { *; }\n-keep interface com.google.android.gms.ads.** { *; }\n-keep class com.google.ads.mediation.** { *; }\n-keep class com.google.firebase.** { *; }\n-keep class com.google.android.gms.measurement.** { *; }"
                     }
                 }
             ]

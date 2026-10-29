@@ -2,7 +2,62 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'goaltracker_v2';
 const FOLDERS_KEY = 'goaltracker_folders_v1';
+const PRE_RESTORE_KEY = 'goaltracker_pre_restore_v1';
 const BACKUP_VERSION = 2;
+
+const MAX_GOALS = 5000;
+const MAX_TEXT = 5000;
+
+const str = (v, fallback = '') => (typeof v === 'string' ? v.slice(0, MAX_TEXT) : fallback);
+const list = (v) => (Array.isArray(v) ? v : []);
+
+function sanitizeGoal(g) {
+    if (!g || typeof g !== 'object' || typeof g.id !== 'string' || typeof g.name !== 'string') return null;
+    return {
+        ...g,
+        id: g.id.slice(0, 100),
+        name: str(g.name),
+        description: str(g.description),
+        category: str(g.category, 'other'),
+        deadline: str(g.deadline),
+        completed: !!g.completed,
+        pinned: !!g.pinned,
+        folderId: str(g.folderId, 'default'),
+        progress: Number.isFinite(g.progress) ? Math.min(100, Math.max(0, g.progress)) : 0,
+        subtasks: list(g.subtasks).filter((x) => x && typeof x === 'object'),
+        updates: list(g.updates).filter((x) => x && typeof x === 'object'),
+        reminderDays: list(g.reminderDays).filter((n) => Number.isInteger(n) && n >= 0 && n <= 365),
+    };
+}
+
+function sanitizeFolder(f) {
+    if (!f || typeof f !== 'object' || typeof f.id !== 'string') return null;
+    return { ...f, id: f.id.slice(0, 100), name: str(f.name) };
+}
+
+/**
+ * Yedek verisini (yerel dosya veya Drive) doğrular ve temizler.
+ * Geçersizse null döner; geçerliyse { goals, folders } döner.
+ */
+export function parseBackupData(data) {
+    const rawGoals = Array.isArray(data) ? data : data?.goals;
+    if (!Array.isArray(rawGoals) || rawGoals.length > MAX_GOALS) return null;
+    const goals = rawGoals.map(sanitizeGoal).filter(Boolean);
+    const folders = list(data?.folders).map(sanitizeFolder).filter(Boolean);
+    return { goals, folders };
+}
+
+/** Doğrulanmış yedeği AsyncStorage'a yazar. */
+export async function writeBackupData({ goals, folders }) {
+    // Geri yüklemeden önce mevcut veriyi güvenlik kopyası olarak sakla (yeni anahtar; mevcutlar değişmez)
+    try {
+        const [g, f] = await Promise.all([AsyncStorage.getItem(STORAGE_KEY), AsyncStorage.getItem(FOLDERS_KEY)]);
+        if (g) await AsyncStorage.setItem(PRE_RESTORE_KEY, JSON.stringify({ at: new Date().toISOString(), goals: g, folders: f }));
+    } catch { /* kopya alınamazsa geri yüklemeyi engelleme */ }
+    const ops = [AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(goals))];
+    if (folders.length > 0) ops.push(AsyncStorage.setItem(FOLDERS_KEY, JSON.stringify(folders)));
+    await Promise.all(ops);
+}
 
 async function getFS() {
     try { return await import('expo-file-system'); } catch { return null; }
@@ -14,7 +69,7 @@ async function getPicker() {
     try { return await import('expo-document-picker'); } catch { return null; }
 }
 
-export async function exportBackup() {
+export async function exportBackup(dialogTitle = 'Backup') {
     try {
         const [FS, Sharing] = await Promise.all([getFS(), getSharing()]);
         if (!FS || !Sharing) return 'unavailable';
@@ -43,10 +98,11 @@ export async function exportBackup() {
 
         await Sharing.shareAsync(filePath, {
             mimeType: 'application/json',
-            dialogTitle: 'Yedeği Kaydet',
+            dialogTitle,
             UTI: 'public.json',
         });
 
+        FS.deleteAsync(filePath, { idempotent: true }).catch(() => {});
         return 'ok';
     } catch (err) {
         console.warn('[backup] export error:', err);
@@ -67,6 +123,7 @@ export async function importBackup() {
         if (result.canceled || !result.assets?.[0]) return { status: 'cancelled' };
 
         const fileUri = result.assets[0].uri;
+        if (result.assets[0].size > 20 * 1024 * 1024) return { status: 'invalid' };
         const raw = await FS.readAsStringAsync(fileUri, { encoding: FS.EncodingType.UTF8 });
 
         let data;
@@ -75,15 +132,11 @@ export async function importBackup() {
         }
 
         // Hem yeni format (version+goals) hem de eski düz array'i destekle
-        const goals = Array.isArray(data) ? data : data?.goals;
-        if (!Array.isArray(goals)) return { status: 'invalid' };
+        const parsed = parseBackupData(data);
+        if (!parsed) return { status: 'invalid' };
 
-        const ops = [AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(goals))];
-        if (Array.isArray(data?.folders) && data.folders.length > 0) {
-            ops.push(AsyncStorage.setItem(FOLDERS_KEY, JSON.stringify(data.folders)));
-        }
-        await Promise.all(ops);
-        return { status: 'ok', count: goals.length };
+        await writeBackupData(parsed);
+        return { status: 'ok', count: parsed.goals.length };
     } catch (err) {
         console.warn('[backup] import error:', err);
         return { status: 'error' };

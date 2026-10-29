@@ -3,7 +3,7 @@ import {
     View, Text, TouchableOpacity, Animated, ScrollView,
     Modal, StyleSheet, Dimensions, Platform, StatusBar, Alert, ActivityIndicator,
 } from 'react-native';
-import { exportBackup, importBackup } from '../utils/backup';
+import { exportBackup, importBackup, parseBackupData, writeBackupData } from '../utils/backup';
 import { downloadFromDrive, getGoogleUserInfo, signOutFromGoogle } from '../utils/googleDrive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
@@ -76,7 +76,7 @@ export default function SideDrawer({
 
     async function handleExport() {
         setBackupLoading(true);
-        const result = await exportBackup();
+        const result = await exportBackup(t('backup.export'));
         setBackupLoading(false);
         if (result === 'error') {
             Alert.alert('', t('backup.exportError'));
@@ -130,21 +130,14 @@ export default function SideDrawer({
                         setBackupLoading(false);
                         if (result.success && result.data) {
                             try {
-                                const data = result.data;
-                                const goals = Array.isArray(data) ? data : data?.goals;
-                                
-                                if (!Array.isArray(goals)) {
+                                const parsed = parseBackupData(result.data);
+                                if (!parsed) {
                                     Alert.alert('', t('backup.importInvalid'));
                                     return;
                                 }
+                                await writeBackupData(parsed);
 
-                                const ops = [AsyncStorage.setItem('goaltracker_v2', JSON.stringify(goals))];
-                                if (Array.isArray(data?.folders) && data.folders.length > 0) {
-                                    ops.push(AsyncStorage.setItem('goaltracker_folders_v1', JSON.stringify(data.folders)));
-                                }
-                                await Promise.all(ops);
-
-                                Alert.alert('', t('backup.importSuccess', { n: goals.length }), [
+                                Alert.alert('', t('backup.importSuccess', { n: parsed.goals.length }), [
                                     {
                                         text: t('backup.restart'),
                                         onPress: () => { onClose(); onRestoreSuccess?.(); },

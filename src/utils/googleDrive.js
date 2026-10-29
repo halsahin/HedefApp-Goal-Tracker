@@ -1,9 +1,9 @@
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
-// TODO: Kullanıcının Google Cloud'dan alacağı Web Client ID buraya eklenecek
+// Web Client ID gizli değildir (OAuth public identifier); istenirse EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ile geçersiz kılınır.
 export function configureGoogleSignIn() {
     GoogleSignin.configure({
-        webClientId: '830389547706-h21a0qappjac6rhi5hhnr65ror227ucg.apps.googleusercontent.com', 
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '830389547706-h21a0qappjac6rhi5hhnr65ror227ucg.apps.googleusercontent.com',
         scopes: ['https://www.googleapis.com/auth/drive.appdata'],
         offlineAccess: false,
     });
@@ -64,6 +64,7 @@ export async function findBackupFileId(accessToken) {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
         
+        if (!response.ok) return null;
         const data = await response.json();
         if (data.files && data.files.length > 0) {
             return data.files[0].id; // Mevcut dosyanın ID'sini döndür
@@ -76,7 +77,15 @@ export async function findBackupFileId(accessToken) {
 }
 
 // JSON verisini Drive'a yükler (Varsa günceller, yoksa yeni oluşturur)
-export async function syncToDrive(goalsData, foldersData = []) {
+// Eşzamanlı yüklemeler (otomatik senkron) yedek dosyasının çoğalmasına yol açmasın diye sıraya alınır
+let syncQueue = Promise.resolve();
+export function syncToDrive(goalsData, foldersData = []) {
+    const run = syncQueue.then(() => doSyncToDrive(goalsData, foldersData));
+    syncQueue = run.catch(() => {});
+    return run;
+}
+
+async function doSyncToDrive(goalsData, foldersData) {
     const accessToken = await getGoogleAccessToken();
     if (!accessToken) return { success: false, error: 'auth_failed' };
 
@@ -130,6 +139,7 @@ export async function syncToDrive(goalsData, foldersData = []) {
             body: multipartRequestBody,
         });
 
+        if (!response.ok) return { success: false, error: `http_${response.status}` };
         const data = await response.json();
         return { success: !!data.id };
     } catch (error) {
@@ -153,6 +163,7 @@ export async function downloadFromDrive() {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
 
+        if (!response.ok) return { success: false, data: null };
         const textData = await response.text();
         return { success: true, data: JSON.parse(textData) };
     } catch (error) {

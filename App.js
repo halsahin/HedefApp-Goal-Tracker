@@ -31,6 +31,7 @@ import {
   cancelGoalNotifications,
 } from './src/utils/notifications';
 import { configureGoogleSignIn } from './src/utils/googleDrive';
+import { logEvent, logScreenView } from './src/utils/analytics';
 
 let mobileAds = null;
 try {
@@ -110,6 +111,8 @@ function AppContent({ onRestore }) {
     if (mobileAds) {
       mobileAds().initialize().catch(() => {});
     }
+    logScreenView('HomeScreen');
+    logEvent('app_open');
   }, []);
 
   const detailGoal = detailGoalId
@@ -122,6 +125,7 @@ function AppContent({ onRestore }) {
     const newGoal = addGoal({ ...data, folderId: activeFolderId ?? 'default' });
     scheduleGoalNotifications(newGoal, t);
     showToast(t('toast.goalAdded'));
+    logEvent('add_goal', { category: data.category || 'general' });
   }, [addGoal, showToast, t, activeFolderId]);
 
   const handleToggleComplete = useCallback((id) => {
@@ -129,7 +133,12 @@ function AppContent({ onRestore }) {
     cancelGoalNotifications(id);
     const newGoal = toggleComplete(id);
     if (newGoal) scheduleGoalNotifications(newGoal, t);
+    // Tamamlanmış hedef geri açılırsa hatırlatıcıları yeniden kur
+    if (g?.completed) scheduleGoalNotifications({ ...g, completed: false }, t);
     showToast(g?.completed ? t('toast.undone') : t('toast.goalCompleted'));
+    if (!g?.completed) {
+      logEvent('complete_goal');
+    }
   }, [toggleComplete, showToast, t]);
 
   const handleTogglePin = useCallback((id) => {
@@ -142,6 +151,7 @@ function AppContent({ onRestore }) {
     cancelGoalNotifications(id);
     deleteGoal(id);
     showToast(t('toast.goalDeleted'));
+    logEvent('delete_goal');
   }, [deleteGoal, showToast, t]);
 
   const handleUpdateGoal = useCallback((id, data) => {

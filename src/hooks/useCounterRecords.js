@@ -13,7 +13,7 @@ export function useCounterRecords() {
                 try { setRecords(JSON.parse(raw)); } catch (_) {}
             }
             setLoaded(true);
-        });
+        }).catch(() => setLoaded(true));
     }, []);
 
     function persist(next) {
