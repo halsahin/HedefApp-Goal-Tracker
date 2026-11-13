@@ -7,15 +7,21 @@ A minimalist React Native app for tracking personal goals. Create goals with cat
 ## Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/1.jpeg" width="23%" />
-  <img src="assets/screenshots/2.jpeg" width="23%" />
-  <img src="assets/screenshots/3.jpeg" width="23%" />
-  <img src="assets/screenshots/4.jpeg" width="23%" />
+  <img src="assets/screenshots/hero.png" width="100%" alt="HedefApp — minimalist goal tracking" />
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/01_home.png" width="19%" alt="Home" />
+  <img src="assets/screenshots/02_add_goal.png" width="19%" alt="Add goal" />
+  <img src="assets/screenshots/03_detail_subtasks.png" width="19%" alt="Goal detail and subtasks" />
+  <img src="assets/screenshots/04_detail_journal.png" width="19%" alt="Progress journal" />
+  <img src="assets/screenshots/05_side_drawer.png" width="19%" alt="Side drawer" />
 </p>
 <p align="center">
-  <img src="assets/screenshots/5.jpeg" width="23%" />
-  <img src="assets/screenshots/6.jpeg" width="23%" />
-  <img src="assets/screenshots/7.jpeg" width="23%" />
+  <img src="assets/screenshots/06_stats.png" width="19%" alt="Statistics" />
+  <img src="assets/screenshots/07_calendar.png" width="19%" alt="Calendar" />
+  <img src="assets/screenshots/08_dark_mode.png" width="19%" alt="Dark mode" />
+  <img src="assets/screenshots/09_pomodoro_dark.png" width="19%" alt="Pomodoro timer" />
 </p>
 
 ---
