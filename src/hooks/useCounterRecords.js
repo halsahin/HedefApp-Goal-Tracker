@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { scheduleDriveSync } from '../utils/googleDrive';
 
 const STORAGE_KEY = '@counter_records_v1';
 
@@ -10,7 +11,10 @@ export function useCounterRecords() {
     useEffect(() => {
         AsyncStorage.getItem(STORAGE_KEY).then(raw => {
             if (raw) {
-                try { setRecords(JSON.parse(raw)); } catch (_) {}
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) setRecords(parsed);
+                } catch (_) {}
             }
             setLoaded(true);
         }).catch(() => setLoaded(true));
@@ -20,6 +24,7 @@ export function useCounterRecords() {
         AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(err => {
             console.error('[useCounterRecords] save error:', err);
         });
+        scheduleDriveSync();
     }
 
     const addRecord = useCallback((record) => {

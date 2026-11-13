@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Typography, Spacing, Radii } from '../constants/theme';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { Feather } from '@expo/vector-icons';
 
 const SORT_OPTIONS = [
     { key: 'days', tKey: 'sort.byDays' },
@@ -11,7 +12,7 @@ const SORT_OPTIONS = [
     { key: 'name', tKey: 'sort.byName' },
 ];
 
-export default function ControlsBar({ sortBy, onSortChange, onAddPress }) {
+export default function ControlsBar({ sortBy, onSortChange, onAddPress, onSelectPress }) {
     const { t } = useLanguage();
     const { colors } = useTheme();
     const [open, setOpen] = useState(false);
@@ -57,6 +58,18 @@ export default function ControlsBar({ sortBy, onSortChange, onAddPress }) {
                 </View>
             </View>
 
+            <View style={styles.rightGroup}>
+            {onSelectPress && (
+                <TouchableOpacity
+                    style={[styles.selectBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={onSelectPress}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('bulk.select')}
+                >
+                    <Feather name="check-square" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+            )}
             <TouchableOpacity 
                 style={[styles.addBtn, { backgroundColor: colors.accent, shadowColor: colors.accent }]} 
                 onPress={onAddPress} 
@@ -64,11 +77,21 @@ export default function ControlsBar({ sortBy, onSortChange, onAddPress }) {
             >
                 <Text style={[styles.addBtnText, { color: colors.bg }]}>{t('btn.newGoal')}</Text>
             </TouchableOpacity>
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
+    rightGroup: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+    selectBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: Radii.sm,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     bar: {
         flexDirection: 'row',
         alignItems: 'center',

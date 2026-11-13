@@ -37,11 +37,32 @@ export function formatDate(isoDate, locale = 'tr-TR') {
 export function deadlineFromDays(days) {
     const d = new Date();
     d.setDate(d.getDate() + days);
+    return toDateStr(d);
+}
+
+/**
+ * Formats a Date as a local-time ISO date string (YYYY-MM-DD).
+ */
+export function toDateStr(d) {
     return [
         d.getFullYear(),
         String(d.getMonth() + 1).padStart(2, '0'),
         String(d.getDate()).padStart(2, '0'),
     ].join('-');
+}
+
+/**
+ * Adds calendar months to an ISO date. The day is clamped to the target month's
+ * length (31 Jan + 1 month = 28/29 Feb). `anchorDay` keeps the original day of
+ * month so a 31st-of-month series returns to the 31st after a short month.
+ */
+export function addMonthsClamped(isoDate, months, anchorDay) {
+    const base = new Date(isoDate + 'T12:00:00');
+    const day = anchorDay || base.getDate();
+    const target = new Date(base.getFullYear(), base.getMonth() + months, 1, 12);
+    const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    target.setDate(Math.min(day, lastDay));
+    return toDateStr(target);
 }
 
 /**

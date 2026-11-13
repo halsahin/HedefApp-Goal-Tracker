@@ -3,8 +3,17 @@ import {
     View, Text, TouchableOpacity, Animated, ScrollView,
     Modal, StyleSheet, Dimensions, Platform, StatusBar, Alert, ActivityIndicator,
 } from 'react-native';
-import { exportBackup, importBackup, parseBackupData, writeBackupData } from '../utils/backup';
-import { downloadFromDrive, getGoogleUserInfo, signOutFromGoogle } from '../utils/googleDrive';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+    exportBackup, importBackup, parseBackupData, writeBackupData,
+    getRestoreSnapshotDate, undoRestore,
+} from '../utils/backup';
+import {
+    downloadFromDrive, getGoogleAccessToken, getGoogleUserInfo, signOutFromGoogle,
+    checkDriveBackup, uploadToDriveNow, cancelPendingDriveSync, getDriveSyncStatus,
+} from '../utils/googleDrive';
+import { getReminderTime, setReminderTime, DEFAULT_REMINDER_TIME } from '../utils/notifications';
+import { isPrivacyOptionsRequired, showPrivacyOptions } from '../utils/consent';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage, LANGUAGES } from '../i18n/LanguageContext';
@@ -17,7 +26,7 @@ const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? (StatusBar.currentHeight ?
 
 export default function SideDrawer({
     visible, onClose, onStatsPress, onCalendarPress, onCounterPress, onRestoreSuccess,
-    folders, activeFolderId, onSelectFolder, onManageFolders,
+    folders, activeFolderId, onSelectFolder, onManageFolders, onReminderTimeChange,
 }) {
     const { colors, themeMode, setThemeMode, isDark } = useTheme();
     const { language, setLanguage, t, locale } = useLanguage();
@@ -30,6 +39,22 @@ export default function SideDrawer({
     const [isDriveSyncOn, setIsDriveSyncOn] = useState(false);
 
     const [driveEmail, setDriveEmail] = useState(null);
+    const [hasRestoreSnapshot, setHasRestoreSnapshot] = useState(false);
+    const [syncStatus, setSyncStatus] = useState(null); // { state: 'ok'|'error'|'conflict', at }
+    const [reminderTime, setReminderTimeState] = useState(DEFAULT_REMINDER_TIME);
+    const [showTimePicker, setShowTimePicker] = useState(false);
+    const [privacyOptionsVisible, setPrivacyOptionsVisible] = useState(false);
+
+    useEffect(() => {
+        if (visible) {
+            getRestoreSnapshotDate().then(at => setHasRestoreSnapshot(!!at));
+            getDriveSyncStatus().then(setSyncStatus);
+            getReminderTime().then(setReminderTimeState);
+            isPrivacyOptionsRequired().then(setPrivacyOptionsVisible);
+        } else {
+            setShowTimePicker(false);
+        }
+    }, [visible]);
 
     useEffect(() => {
         if (visible) {
@@ -37,7 +62,8 @@ export default function SideDrawer({
                 const isOn = val === 'true';
                 setIsDriveSyncOn(isOn);
                 if (isOn) {
-                    getGoogleUserInfo().then(info => {
+                    // Uygulama yeniden açıldıysa önce kayıtlı oturumu sessizce geri yükle
+                    getGoogleAccessToken().then(() => getGoogleUserInfo()).then(info => {
                         if (info && info.email) {
                             setDriveEmail(info.email);
                         }
@@ -95,15 +121,11 @@ export default function SideDrawer({
                     text: t('backup.importConfirm'),
                     onPress: async () => {
                         setBackupLoading(true);
+                        cancelPendingDriveSync();
                         const result = await importBackup();
                         setBackupLoading(false);
                         if (result.status === 'ok') {
-                            Alert.alert('', t('backup.importSuccess', { n: result.count }), [
-                                {
-                                    text: t('backup.restart'),
-                                    onPress: () => { onClose(); onRestoreSuccess?.(); },
-                                },
-                            ]);
+                            showRestoreDone(result.count);
                         } else if (result.status === 'invalid') {
                             Alert.alert('', t('backup.importInvalid'));
                         } else if (result.status === 'error') {
@@ -116,6 +138,41 @@ export default function SideDrawer({
         );
     }
 
+    // Drive'daki yedeği indirip yerel verinin yerine yazar. Başarılıysa hedef sayısını, değilse null döner.
+    async function restoreFromDrive() {
+        setBackupLoading(true);
+        try {
+            const result = await downloadFromDrive();
+            if (!result.success) {
+                Alert.alert('', t('backup.importError'));
+                return null;
+            }
+            const parsed = result.data ? parseBackupData(result.data) : null;
+            if (!parsed) {
+                Alert.alert('', t('backup.importInvalid'));
+                return null;
+            }
+            // Bekleyen otomatik senkron, geri yüklenen verinin üzerine eski veriyi yüklemesin
+            cancelPendingDriveSync();
+            await writeBackupData(parsed);
+            return parsed.goals.length;
+        } catch (e) {
+            Alert.alert('', t('backup.importError'));
+            return null;
+        } finally {
+            setBackupLoading(false);
+        }
+    }
+
+    function showRestoreDone(count) {
+        Alert.alert('', t('backup.importSuccess', { n: count }), [
+            {
+                text: t('backup.restart'),
+                onPress: () => { onClose(); onRestoreSuccess?.(); },
+            },
+        ]);
+    }
+
     async function handleDriveImport() {
         Alert.alert(
             t('backup.importTitle'),
@@ -125,37 +182,136 @@ export default function SideDrawer({
                 {
                     text: t('backup.importConfirm'),
                     onPress: async () => {
-                        setBackupLoading(true);
-                        const result = await downloadFromDrive();
-                        setBackupLoading(false);
-                        if (result.success && result.data) {
-                            try {
-                                const parsed = parseBackupData(result.data);
-                                if (!parsed) {
-                                    Alert.alert('', t('backup.importInvalid'));
-                                    return;
-                                }
-                                await writeBackupData(parsed);
-
-                                Alert.alert('', t('backup.importSuccess', { n: parsed.goals.length }), [
-                                    {
-                                        text: t('backup.restart'),
-                                        onPress: () => { onClose(); onRestoreSuccess?.(); },
-                                    },
-                                ]);
-                            } catch(e) {
-                                Alert.alert('', t('backup.importError'));
-                            }
-                        } else if (result.success && !result.data) {
-                            Alert.alert('', t('backup.importInvalid'));
-                        } else {
-                            Alert.alert('', t('backup.importError'));
-                        }
+                        const count = await restoreFromDrive();
+                        if (count !== null) showRestoreDone(count);
                     },
                 },
             ]
         );
     }
+
+    async function enableDriveSync() {
+        await AsyncStorage.setItem('drive_autosync', 'true');
+        setIsDriveSyncOn(true);
+        const info = await getGoogleUserInfo();
+        setDriveEmail(info?.email ?? null);
+    }
+
+    async function handleToggleDriveSync() {
+        if (isDriveSyncOn) {
+            await AsyncStorage.setItem('drive_autosync', 'false');
+            setIsDriveSyncOn(false);
+            Alert.alert('', t('backup.driveSyncDisabled'));
+            return;
+        }
+
+        // Girişi burada, kullanıcı açıkça istediğinde yap ve Drive'da yedek var mı bak
+        setBackupLoading(true);
+        const state = await checkDriveBackup();
+        setBackupLoading(false);
+        if (state === 'error') {
+            Alert.alert('', t('backup.driveSignInError'));
+            return;
+        }
+
+        if (state === 'none') {
+            await enableDriveSync();
+            setBackupLoading(true);
+            await uploadToDriveNow();
+            setBackupLoading(false);
+            setSyncStatus(await getDriveSyncStatus());
+            Alert.alert('', t('backup.driveSyncEnabled'));
+            return;
+        }
+
+        promptDriveChoice();
+    }
+
+    // Drive'da (başka cihazdan gelmiş olabilecek) bir yedek var: senkron bu cihazdaki veriyi onun
+    // üzerine yazacağı için hangisinin korunacağını kullanıcı seçer. Çakışma çözümünde de kullanılır.
+    function promptDriveChoice() {
+        Alert.alert(
+            t('backup.driveExistsTitle'),
+            t('backup.driveExistsMsg'),
+            [
+                { text: t('backup.cancel'), style: 'cancel' },
+                {
+                    text: t('backup.driveUseCloud'),
+                    onPress: async () => {
+                        const count = await restoreFromDrive();
+                        if (count === null) return;
+                        await enableDriveSync();
+                        setSyncStatus(await getDriveSyncStatus());
+                        showRestoreDone(count);
+                    },
+                },
+                {
+                    text: t('backup.driveUseLocal'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        await enableDriveSync();
+                        setBackupLoading(true);
+                        const result = await uploadToDriveNow();
+                        setBackupLoading(false);
+                        setSyncStatus(await getDriveSyncStatus());
+                        Alert.alert('', result?.success ? t('backup.driveSyncEnabled') : t('backup.driveSignInError'));
+                    },
+                },
+            ]
+        );
+    }
+
+    function handleUndoRestore() {
+        Alert.alert(
+            t('backup.undoRestore'),
+            t('backup.undoRestoreConfirm'),
+            [
+                { text: t('backup.cancel'), style: 'cancel' },
+                {
+                    text: t('backup.undoRestore'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        setBackupLoading(true);
+                        let ok = false;
+                        try {
+                            cancelPendingDriveSync();
+                            ok = await undoRestore();
+                        } catch { ok = false; }
+                        setBackupLoading(false);
+                        if (!ok) {
+                            Alert.alert('', t('backup.importError'));
+                            return;
+                        }
+                        setHasRestoreSnapshot(false);
+                        Alert.alert('', t('backup.undoRestoreDone'), [
+                            {
+                                text: t('backup.restart'),
+                                onPress: () => { onClose(); onRestoreSuccess?.(); },
+                            },
+                        ]);
+                    },
+                },
+            ]
+        );
+    }
+
+    function reminderTimeAsDate() {
+        const [h, m] = reminderTime.split(':').map(Number);
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        return d;
+    }
+
+    async function handleReminderTimePicked(event, date) {
+        if (Platform.OS === 'android') setShowTimePicker(false);
+        if (event?.type === 'dismissed' || !date) return;
+        const next = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        if (next === reminderTime) return;
+        setReminderTimeState(next);
+        await setReminderTime(next);
+        onReminderTimeChange?.();
+    }
+
     async function handleChangeDriveAccount() {
         Alert.alert(
             t('backup.changeAccountTitle') || 'Hesabı Değiştir',
@@ -321,12 +477,8 @@ export default function SideDrawer({
                                     ? { backgroundColor: colors.accentBg, borderColor: colors.accentDark }
                                     : { backgroundColor: colors.surface2, borderColor: colors.border }
                             ]}
-                            onPress={async () => {
-                                const newValue = !isDriveSyncOn;
-                                await AsyncStorage.setItem('drive_autosync', newValue.toString());
-                                setIsDriveSyncOn(newValue);
-                                Alert.alert('', newValue ? t('backup.driveSyncEnabled') : t('backup.driveSyncDisabled'));
-                            }}
+                            onPress={handleToggleDriveSync}
+                            disabled={backupLoading}
                             activeOpacity={0.75}
                         >
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -356,6 +508,30 @@ export default function SideDrawer({
                                         {t('backup.changeAccountTitle') || 'Değiştir'}
                                     </Text>
                                 </TouchableOpacity>
+                            </View>
+                        )}
+
+                        {isDriveSyncOn && syncStatus && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, marginBottom: Spacing.sm, marginTop: -4 }}>
+                                <Feather
+                                    name={syncStatus.state === 'ok' ? 'check-circle' : 'alert-triangle'}
+                                    size={14}
+                                    color={syncStatus.state === 'ok' ? colors.success : colors.danger}
+                                />
+                                <Text style={{ flex: 1, fontSize: Typography.xs, marginLeft: 6, color: syncStatus.state === 'ok' ? colors.textLight : colors.danger }}>
+                                    {syncStatus.state === 'ok'
+                                        ? t('backup.lastSyncOk', { time: new Date(syncStatus.at).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })
+                                        : syncStatus.state === 'conflict'
+                                            ? t('backup.syncConflict')
+                                            : t('backup.lastSyncFailed')}
+                                </Text>
+                                {syncStatus.state === 'conflict' && (
+                                    <TouchableOpacity onPress={promptDriveChoice} style={{ paddingVertical: 4, paddingLeft: 8 }} disabled={backupLoading}>
+                                        <Text style={{ fontSize: Typography.xs, color: isDark ? colors.accent : colors.accentDark, fontWeight: '700' }}>
+                                            {t('backup.resolve')}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         )}
 
@@ -401,7 +577,59 @@ export default function SideDrawer({
                                 {t('backup.import')}
                             </Text>
                         </TouchableOpacity>
+                        {hasRestoreSnapshot && (
+                            <TouchableOpacity
+                                style={[styles.backupBtn, { backgroundColor: colors.surface2, borderColor: colors.border, marginTop: Spacing.xs }]}
+                                onPress={handleUndoRestore}
+                                activeOpacity={0.75}
+                                disabled={backupLoading}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Feather name="rotate-ccw" size={16} color={colors.textMuted} />
+                                    <Text style={[styles.backupBtnText, { color: colors.textMuted, marginLeft: 8 }]}>
+                                        {t('backup.undoRestore')}
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        )}
                     </View>
+
+                    {/* Bildirimler */}
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionLabel, { color: colors.textLight }]}>{toUpper(t('drawer.notifications'))}</Text>
+                        <TouchableOpacity
+                            style={[styles.menuItem, { borderBottomColor: colors.border }]}
+                            onPress={() => setShowTimePicker(v => !v)}
+                            activeOpacity={0.75}
+                        >
+                            <Feather name="bell" size={18} color={colors.textMuted} style={styles.menuItemIcon} />
+                            <Text style={[styles.menuItemText, { color: colors.text, flex: 1 }]}>{t('drawer.reminderTime')}</Text>
+                            <Text style={[styles.menuItemText, { color: isDark ? colors.accent : colors.accentDark, fontWeight: '700' }]}>{reminderTime}</Text>
+                        </TouchableOpacity>
+                        {showTimePicker && (
+                            <DateTimePicker
+                                value={reminderTimeAsDate()}
+                                mode="time"
+                                is24Hour
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={handleReminderTimePicked}
+                            />
+                        )}
+                    </View>
+
+                    {/* Gizlilik (yalnızca onay gerektiren bölgelerde görünür) */}
+                    {privacyOptionsVisible && (
+                        <View style={styles.section}>
+                            <TouchableOpacity
+                                style={[styles.menuItem, { borderBottomColor: colors.border }]}
+                                onPress={showPrivacyOptions}
+                                activeOpacity={0.75}
+                            >
+                                <Feather name="shield" size={18} color={colors.textMuted} style={styles.menuItemIcon} />
+                                <Text style={[styles.menuItemText, { color: colors.text }]}>{t('drawer.privacyOptions')}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
 
                     {/* Language */}
                     <View style={styles.section}>

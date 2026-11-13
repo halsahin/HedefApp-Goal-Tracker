@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateId } from '../utils/dateUtils';
+import { scheduleDriveSync } from '../utils/googleDrive';
 
 const FOLDERS_KEY = 'goaltracker_folders_v1';
 
@@ -38,17 +39,7 @@ export function useFolders() {
         if (isFirstRender.current) { isFirstRender.current = false; return; }
         AsyncStorage.setItem(FOLDERS_KEY, JSON.stringify(folders)).catch(() => {});
 
-        // Auto sync with Google Drive if enabled
-        AsyncStorage.getItem('drive_autosync').then(autoSync => {
-            if (autoSync === 'true') {
-                AsyncStorage.getItem('goaltracker_v2').then(goalsRaw => {
-                    const goals = goalsRaw ? JSON.parse(goalsRaw) : [];
-                    import('../utils/googleDrive').then(({ syncToDrive }) => {
-                        syncToDrive(goals, folders).catch(err => console.log('Auto-sync error:', err));
-                    });
-                });
-            }
-        });
+        scheduleDriveSync();
     }, [folders, loaded]);
 
     const addFolder = useCallback((name) => {

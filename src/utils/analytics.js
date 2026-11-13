@@ -24,3 +24,14 @@ export const logScreenView = async (screenName, screenClass = screenName) => {
     // Silent catch
   }
 };
+
+/**
+ * Analitik veri toplamayı açar/kapatır (kullanıcı onayına göre).
+ */
+export const setAnalyticsEnabled = async (enabled) => {
+  try {
+    await analytics().setAnalyticsCollectionEnabled(!!enabled);
+  } catch (error) {
+    // Silent catch
+  }
+};

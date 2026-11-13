@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, StatusBar as RNStatusBar, FlatList,
-  StyleSheet, Platform,
+  StyleSheet, Platform, AppState, Alert, BackHandler,
 } from 'react-native';
 import Constants from 'expo-constants';
 
@@ -10,6 +10,7 @@ import { LanguageProvider, useLanguage } from './src/i18n/LanguageContext';
 import { useGoals } from './src/hooks/useGoals';
 import AppHeader from './src/components/AppHeader';
 import ControlsBar from './src/components/ControlsBar';
+import SelectionBar from './src/components/SelectionBar';
 import FilterTabs from './src/components/FilterTabs';
 import SearchBar from './src/components/SearchBar';
 import GoalCard from './src/components/GoalCard';
@@ -29,19 +30,17 @@ import {
   setupNotifications,
   scheduleGoalNotifications,
   cancelGoalNotifications,
+  rescheduleAllNotifications,
+  listenForGoalNotificationTaps,
 } from './src/utils/notifications';
-import { configureGoogleSignIn } from './src/utils/googleDrive';
+import { configureGoogleSignIn, flushDriveSync } from './src/utils/googleDrive';
 import { logEvent, logScreenView } from './src/utils/analytics';
-
-let mobileAds = null;
-try {
-  mobileAds = require('react-native-google-mobile-ads').default;
-} catch {
-  // Ignore in environments where it's missing (e.g. web or Expo Go)
-}
+import { initAdsWithConsent } from './src/utils/consent';
+import { toDateStr } from './src/utils/dateUtils';
+import { setDayEntry } from './src/utils/tracking';
 
 function AppContent({ onRestore }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { colors, isDark } = useTheme();
 
   const {
@@ -69,6 +68,10 @@ function AppContent({ onRestore }) {
     toggleComplete,
     togglePin,
     deleteGoal,
+    restoreGoal,
+    toggleDay,
+    setDayDetails,
+    moveGoalsToFolder,
     moveGoalsToDefaultFolder,
     addUpdate,
     editUpdate,
@@ -93,7 +96,12 @@ function AppContent({ onRestore }) {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [folderPickerVisible, setFolderPickerVisible] = useState(false);
   const [counterVisible, setCounterVisible] = useState(false);
-  const [toastMsg, setToastMsg] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [adsReady, setAdsReady] = useState(false);
+  // Toplu seçim: null = kapalı, Set = seçim modu (boş olabilir)
+  const [selectedIds, setSelectedIds] = useState(null);
+  const selectionMode = selectedIds !== null;
+  const [moveVisible, setMoveVisible] = useState(false);
 
   const {
     records: counterRecords,
@@ -104,22 +112,56 @@ function AppContent({ onRestore }) {
   const rawGoalsRef = useRef(rawGoals);
   useEffect(() => { rawGoalsRef.current = rawGoals; }, [rawGoals]);
 
-  // Request notification permissions once on mount
-  useEffect(() => { 
-    setupNotifications(); 
+  useEffect(() => {
+    let active = true;
     configureGoogleSignIn();
-    if (mobileAds) {
-      mobileAds().initialize().catch(() => {});
-    }
-    logScreenView('HomeScreen');
-    logEvent('app_open');
+    // Önce kullanıcı onayı (UMP), sonra reklam SDK'sı ve analitik
+    initAdsWithConsent().then(canRequestAds => {
+      if (!active) return;
+      setAdsReady(canRequestAds);
+      logScreenView('HomeScreen');
+      logEvent('app_open');
+    });
+    // Arka plana geçerken bekleyen Drive senkronunu beklemeden gönder
+    const sub = AppState.addEventListener('change', state => {
+      if (state !== 'active') flushDriveSync();
+    });
+    return () => { active = false; sub.remove(); };
   }, []);
+
+  // Veri yüklenince: bildirim izni iste, ardından tüm hatırlatıcıları güncel veriye göre baştan kur.
+  // Her açılışta, yedekten geri yüklemede ve dil değişince çalışır; silinmiş hedeflerin bildirimleri
+  // temizlenir, metinler güncel dile geçer, sınır nedeniyle kurulamayan hatırlatıcılar sıraya girer.
+  useEffect(() => {
+    if (!loaded) return;
+    setupNotifications().then(() => rescheduleAllNotifications(rawGoalsRef.current, t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, language]);
+
+  // Bildirime dokunulunca ilgili hedefin detayını aç
+  useEffect(() => {
+    if (!loaded) return;
+    return listenForGoalNotificationTaps(goalId => {
+      if (rawGoalsRef.current.some(g => g.id === goalId)) {
+        setDrawerVisible(false);
+        setDetailGoalId(goalId);
+      }
+    });
+  }, [loaded]);
 
   const detailGoal = detailGoalId
     ? rawGoals.find(g => g.id === detailGoalId) ?? null
     : null;
 
-  const showToast = useCallback((msg) => setToastMsg(msg), []);
+  // action: { label, onPress } verilirse Toast'ta dokunulabilir buton gösterilir (ör. "Geri al")
+  const showToast = useCallback((message, action) => {
+    setToast({
+      id: `${Date.now()}-${Math.random()}`,
+      message,
+      actionLabel: action?.label,
+      onAction: action?.onPress,
+    });
+  }, []);
 
   const handleAddGoal = useCallback((data) => {
     const newGoal = addGoal({ ...data, folderId: activeFolderId ?? 'default' });
@@ -131,8 +173,10 @@ function AppContent({ onRestore }) {
   const handleToggleComplete = useCallback((id) => {
     const g = rawGoalsRef.current.find(x => x.id === id);
     cancelGoalNotifications(id);
-    const newGoal = toggleComplete(id);
-    if (newGoal) scheduleGoalNotifications(newGoal, t);
+    const { created, removedId } = toggleComplete(id);
+    if (created) scheduleGoalNotifications(created, t);
+    // Tamamlama geri alındıysa otomatik oluşturulan sonraki örnek de kaldırıldı
+    if (removedId) cancelGoalNotifications(removedId);
     // Tamamlanmış hedef geri açılırsa hatırlatıcıları yeniden kur
     if (g?.completed) scheduleGoalNotifications({ ...g, completed: false }, t);
     showToast(g?.completed ? t('toast.undone') : t('toast.goalCompleted'));
@@ -148,11 +192,155 @@ function AppContent({ onRestore }) {
   }, [togglePin, showToast, t]);
 
   const handleDelete = useCallback((id) => {
+    const index = rawGoalsRef.current.findIndex(x => x.id === id);
+    const removed = index >= 0 ? rawGoalsRef.current[index] : null;
     cancelGoalNotifications(id);
     deleteGoal(id);
-    showToast(t('toast.goalDeleted'));
     logEvent('delete_goal');
-  }, [deleteGoal, showToast, t]);
+    if (!removed) {
+      showToast(t('toast.goalDeleted'));
+      return;
+    }
+    showToast(t('toast.goalDeleted'), {
+      label: t('toast.undo'),
+      onPress: () => {
+        restoreGoal(removed, index);
+        scheduleGoalNotifications(removed, t);
+        showToast(t('toast.undone'));
+      },
+    });
+  }, [deleteGoal, restoreGoal, showToast, t]);
+
+  // ── Günlük takip ────────────────────────────────────────────
+  const handleToggleDay = useCallback((goalId, date) => {
+    const before = rawGoalsRef.current.find(g => g.id === goalId);
+    const result = toggleDay(goalId, date);
+    if (!result) return;
+    // İşaretlenen günün "bugünü işaretle" hatırlatması kalksın (ya da işaret kaldırıldıysa geri gelsin)
+    if (before && !result.autoCompleted) {
+      scheduleGoalNotifications({ ...before, dayLog: setDayEntry(before.dayLog, date, { done: result.done }) }, t);
+    }
+    if (result.autoCompleted) {
+      // Son gün de işaretlendi: hedef tamamlandı
+      cancelGoalNotifications(goalId);
+      showToast(t('toast.goalCompleted'));
+      logEvent('complete_goal');
+    } else if (date === toDateStr(new Date())) {
+      showToast(result.done ? t('toast.dayDone') : t('toast.dayUndone'));
+    }
+  }, [toggleDay, showToast, t]);
+
+  const handleToggleToday = useCallback((goalId) => {
+    handleToggleDay(goalId, toDateStr(new Date()));
+  }, [handleToggleDay]);
+
+  // ── Toplu seçim ─────────────────────────────────────────────
+  const exitSelection = useCallback(() => setSelectedIds(null), []);
+
+  const handleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev ?? []);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Listede şu an görünen (filtre/arama sonrası) hedeflerin tamamını seç ya da seçimi boşalt
+  const visibleIdsRef = useRef([]);
+  visibleIdsRef.current = goals.map(g => g.id);
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(prev => {
+      const visible = visibleIdsRef.current;
+      const all = visible.length > 0 && visible.every(id => prev?.has(id));
+      return new Set(all ? [] : visible);
+    });
+  }, []);
+
+  const selectedGoals = useCallback(() => {
+    const ids = selectedIds ?? new Set();
+    return rawGoalsRef.current.filter(g => ids.has(g.id));
+  }, [selectedIds]);
+
+  const handleBulkComplete = useCallback(() => {
+    const targets = selectedGoals().filter(g => !g.completed);
+    for (const g of targets) {
+      cancelGoalNotifications(g.id);
+      const { created } = toggleComplete(g.id);
+      if (created) scheduleGoalNotifications(created, t);
+    }
+    if (targets.length > 0) logEvent('bulk_complete', { count: targets.length });
+    showToast(t('toast.bulkCompleted', { n: targets.length }));
+    exitSelection();
+  }, [selectedGoals, toggleComplete, showToast, exitSelection, t]);
+
+  // Seçilenlerin hepsi favoriyse favoriden çıkarır, değilse hepsini favoriye alır
+  const handleBulkPin = useCallback(() => {
+    const targets = selectedGoals();
+    const allPinned = targets.length > 0 && targets.every(g => g.pinned);
+    const toToggle = targets.filter(g => g.pinned === allPinned);
+    for (const g of toToggle) togglePin(g.id);
+    showToast(t(allPinned ? 'toast.bulkUnpinned' : 'toast.bulkPinned', { n: toToggle.length }));
+    exitSelection();
+  }, [selectedGoals, togglePin, showToast, exitSelection, t]);
+
+  const handleBulkMove = useCallback((folderId) => {
+    const ids = selectedGoals().map(g => g.id);
+    moveGoalsToFolder(ids, folderId ?? 'default');
+    showToast(t('toast.bulkMoved', { n: ids.length }));
+    exitSelection();
+  }, [selectedGoals, moveGoalsToFolder, showToast, exitSelection, t]);
+
+  const handleBulkDelete = useCallback(() => {
+    const targets = selectedGoals();
+    if (targets.length === 0) return;
+    Alert.alert(
+      t('bulk.deleteTitle', { n: targets.length }),
+      t('bulk.deleteMsg', { n: targets.length }),
+      [
+        { text: t('delete.cancel'), style: 'cancel' },
+        {
+          text: t('delete.confirm'),
+          style: 'destructive',
+          onPress: () => {
+            // Geri alma için hedefleri ve listedeki sıralarını sakla (küçük indeksten büyüğe eklenir)
+            const removed = targets
+              .map(g => ({ goal: g, index: rawGoalsRef.current.findIndex(x => x.id === g.id) }))
+              .sort((a, b) => a.index - b.index);
+            for (const { goal } of removed) {
+              cancelGoalNotifications(goal.id);
+              deleteGoal(goal.id);
+            }
+            logEvent('bulk_delete', { count: removed.length });
+            exitSelection();
+            showToast(t('toast.bulkDeleted', { n: removed.length }), {
+              label: t('toast.undo'),
+              onPress: () => {
+                for (const { goal, index } of removed) {
+                  restoreGoal(goal, index);
+                  scheduleGoalNotifications(goal, t);
+                }
+                showToast(t('toast.undone'));
+              },
+            });
+          },
+        },
+      ]
+    );
+  }, [selectedGoals, deleteGoal, restoreGoal, showToast, exitSelection, t]);
+
+  // Android geri tuşu seçim modundan çıkarır
+  useEffect(() => {
+    if (!selectionMode) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSelectedIds(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [selectionMode]);
+
+  const handleReminderTimeChange = useCallback(() => {
+    rescheduleAllNotifications(rawGoalsRef.current, t);
+  }, [t]);
 
   const handleUpdateGoal = useCallback((id, data) => {
     updateGoal(id, data);
@@ -183,8 +371,13 @@ function AppContent({ onRestore }) {
       onTogglePin={handleTogglePin}
       onDelete={handleDelete}
       onPress={() => setDetailGoalId(item.id)}
+      onToggleToday={handleToggleToday}
+      selectionMode={selectionMode}
+      selected={!!selectedIds?.has(item.id)}
+      onSelect={handleSelect}
+      onLongPress={handleSelect}
     />
-  ), [handleToggleComplete, handleTogglePin, handleDelete]);
+  ), [handleToggleComplete, handleTogglePin, handleDelete, handleToggleToday, handleSelect, selectionMode, selectedIds]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
@@ -206,11 +399,25 @@ function AppContent({ onRestore }) {
           folderName={activeFolder?.name ?? t('folder.all')}
           onFolderPress={() => setFolderPickerVisible(true)}
         />
-        <ControlsBar
-          sortBy={sortBy}
-          onSortChange={setSortBy}
-          onAddPress={() => setAddModalVisible(true)}
-        />
+        {selectionMode ? (
+          <SelectionBar
+            count={selectedIds.size}
+            allSelected={goals.length > 0 && goals.every(g => selectedIds.has(g.id))}
+            onCancel={exitSelection}
+            onSelectAll={handleSelectAll}
+            onComplete={handleBulkComplete}
+            onPin={handleBulkPin}
+            onMove={() => setMoveVisible(true)}
+            onDelete={handleBulkDelete}
+          />
+        ) : (
+          <ControlsBar
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onAddPress={() => setAddModalVisible(true)}
+            onSelectPress={goals.length > 0 ? () => setSelectedIds(new Set()) : undefined}
+          />
+        )}
         <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
         <FilterTabs filterBy={filterBy} onFilterChange={setFilterBy} />
       </View>
@@ -229,7 +436,7 @@ function AppContent({ onRestore }) {
         />
       </View>
 
-      <AdBannerComponent />
+      {adsReady && <AdBannerComponent />}
 
       <AddGoalModal
         visible={addModalVisible}
@@ -248,6 +455,8 @@ function AppContent({ onRestore }) {
         onAddSubtask={addSubtask}
         onToggleSubtask={toggleSubtask}
         onDeleteSubtask={deleteSubtask}
+        onToggleDay={handleToggleDay}
+        onSetDayDetails={setDayDetails}
       />
 
       <StatsModal
@@ -262,7 +471,7 @@ function AppContent({ onRestore }) {
         goals={rawGoals}
       />
 
-      <Toast message={toastMsg} onHide={() => setToastMsg(null)} />
+      <Toast toast={toast} onHide={() => setToast(null)} />
 
       <SideDrawer
         visible={drawerVisible}
@@ -275,6 +484,7 @@ function AppContent({ onRestore }) {
         activeFolderId={activeFolderId}
         onSelectFolder={setActiveFolderId}
         onManageFolders={() => setFolderPickerVisible(true)}
+        onReminderTimeChange={handleReminderTimeChange}
       />
 
       <CounterModal
@@ -298,6 +508,20 @@ function AppContent({ onRestore }) {
         onRenameFolder={renameFolder}
         onDeleteFolder={handleDeleteFolder}
       />
+
+      {/* Toplu taşıma: aynı klasör listesi, seçim hedefleri taşır */}
+      <FolderPickerModal
+        visible={moveVisible}
+        onClose={() => setMoveVisible(false)}
+        title={t('bulk.moveTitle')}
+        hideAll
+        folders={localizedFolders}
+        activeFolderId="__none__"
+        onSelectFolder={handleBulkMove}
+        onAddFolder={addFolder}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={handleDeleteFolder}
+      />
     </View>
   );
 }
@@ -305,9 +529,10 @@ function AppContent({ onRestore }) {
 export default function App() {
   const [reloadKey, setReloadKey] = useState(0);
   return (
-    <ThemeProvider>
+    // key: yedekten geri yüklemede tema/dil ayarları da değişebildiği için tüm ağaç yeniden kurulur
+    <ThemeProvider key={reloadKey}>
       <LanguageProvider>
-        <AppContent key={reloadKey} onRestore={() => setReloadKey(k => k + 1)} />
+        <AppContent onRestore={() => setReloadKey(k => k + 1)} />
       </LanguageProvider>
     </ThemeProvider>
   );

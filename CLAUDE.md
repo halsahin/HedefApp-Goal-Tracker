@@ -26,6 +26,7 @@ HedefApp, kullanıcıların hedeflerini oluşturup takip edebildiği minimalist 
 | Reklamlar | `react-native-google-mobile-ads` (AdMob Banner) |
 | i18n | Özel context + `src/i18n/translations.js` |
 | Derleme | EAS Build (eas.json) |
+| Test | `npm test`: saf mantık için Node test koşucusu (`tests/*.test.mjs`) + ekran/hook testleri için Jest (`jest-expo`, `__tests__/*.test.js`) |
 
 ---
 
@@ -42,8 +43,10 @@ hedefapp/
 │   ├── hooks/              # useGoals, useFolders, useCounterRecords
 │   ├── contexts/           # ThemeContext
 │   ├── i18n/               # LanguageContext + translations.js
-│   ├── utils/              # notifications, backup, dateUtils, calendar
+│   ├── utils/              # notifications, backup, backupSchema, recurrence, tracking, googleDrive, consent, dateUtils, calendar
 │   └── constants/          # categories, theme renk paletleri
+├── tests/                  # Saf mantık birim testleri — Node ile (`npm run test:unit`)
+├── __tests__/              # Bileşen ve hook testleri — Jest ile (`npm run test:ui`); ortak sahte modüller jest.setup.js'te
 ├── assets/                 # icon, splash, adaptive-icon, favicon
 └── src/config/ads.js       # GİTİGNORE — gerçek AdMob ID'leri burada tutulur
 ```
@@ -79,7 +82,13 @@ AsyncStorage (goaltracker_folders_v1) → useFolders → SideDrawer / FolderPick
   pinned: boolean,
   createdAt: string,    // ISO 8601
   progress: number,     // 0-100 (alt görevlerden otomatik hesaplanır)
-  recurring: { type: 'daily'|'weekly'|'monthly', interval?: number } | null,
+  recurring: { type: 'daily'|'weekly'|'monthly'|'custom', interval?: number, anchorDay?: number } | null,
+  streak: number,       // yinelenen hedefte art arda zamanında tamamlama sayısı
+  spawnedFrom: string | null, // yinelenen hedefin hangi örnekten türediği (tamamlama geri alınınca kaldırmak için)
+  tracking: boolean,    // günlük takip hedefi ("30 gün kitap oku"); recurring ile birlikte kullanılmaz
+  trackingUnit: string, // isteğe bağlı günlük miktar birimi ("sayfa"); boşsa miktar sorulmaz
+  dailyReminder: boolean, // takip hedefinde her gün "bugünü işaretle" bildirimi (varsayılan true)
+  dayLog: { [date: "YYYY-MM-DD"]: { done: boolean, note: string, value?: number } }, // gün gün işaret + not + miktar
   subtasks: Array<{ id, text, completed }>,
   updates: Array<{ id, text, date }>,
   reminderDays: number[], // [3, 1] = 3 gün ve 1 gün önce bildirim
@@ -94,7 +103,12 @@ AsyncStorage (goaltracker_folders_v1) → useFolders → SideDrawer / FolderPick
 | `goaltracker_v1` | Eski format (migrasyon için okunur) |
 | `goaltracker_v2` | Mevcut format (hedefler) |
 | `goaltracker_folders_v1` | Klasörler |
-| `goaltracker_counters_v1` | Sayaç kayıtları |
+| `@counter_records_v1` | Sayaç kayıtları |
+| `goaltracker_pre_restore_v1` | Son geri yüklemeden önceki veri ("geri al" için) |
+| `drive_autosync` | Google Drive otomatik senkron açık mı (`'true'`/`'false'`) |
+| `drive_remote_rev` | Bu cihazın son gördüğü Drive yedeğinin `modifiedTime` değeri (çakışma denetimi) |
+| `drive_last_sync` | Son senkron sonucu `{ state: 'ok'\|'error'\|'conflict', at }` |
+| `app_reminder_time` | Hatırlatma saati `"HH:MM"` (varsayılan `09:00`) |
 | `app_theme` | `'light' \| 'dark' \| 'system'` |
 | `app_language` | `'tr' \| 'en' \| 'zh' \| 'ja' \| 'ko'` |
 
@@ -105,19 +119,21 @@ AsyncStorage (goaltracker_folders_v1) → useFolders → SideDrawer / FolderPick
 | Bileşen | Açıklama |
 |---------|----------|
 | `AppHeader` | Başlık, hedef sayısı, menü butonu |
-| `ControlsBar` | Sıralama seçici + "Hedef Ekle" butonu |
-| `FilterTabs` | active / completed / pinned / all filtreleri |
+| `ControlsBar` | Sıralama seçici + toplu seçim butonu + "Hedef Ekle" butonu |
+| `SelectionBar` | Toplu seçim modunda ControlsBar'ın yerini alır (tamamla / favori / klasöre taşı / sil) |
+| `FilterTabs` | all / active / overdue / completed / pinned filtreleri |
 | `SearchBar` | İsim & açıklama arama |
-| `GoalCard` | Hedef listesi satırı (tamamla, pinle, sil) |
+| `GoalCard` | Hedef listesi satırı (tamamla, pinle, sil); uzun basınca toplu seçim; takip hedefinde kutucuk bugünü işaretler |
 | `EmptyState` | Hedef yokken gösterilen ekran |
 | `AddGoalModal` | Yeni hedef ekleme formu |
 | `GoalDetailModal` | Hedef detay, düzenleme, alt görev, not ekleme |
+| `TrackingSection` | Günlük takip hedefinin gün ızgarası + seçili günün işaret/not paneli (detay ekranında) |
 | `StatsModal` | İstatistikler (kategori dağılımı vb.) |
 | `CalendarModal` | Takvim görünümü |
 | `SideDrawer` | Yan menü: stats, takvim, sayaç, yedekleme, ayarlar |
 | `FolderPickerModal` | Klasör seçici ve yöneticisi |
 | `CounterModal` | Sayaç kayıt takibi |
-| `Toast` | Geçici bildirim mesajı |
+| `Toast` | Geçici bildirim mesajı; isteğe bağlı eylem butonu (silmede "Geri al") |
 | `AdBannerComponent` | AdMob banner reklamı |
 
 ---
@@ -136,7 +152,11 @@ AsyncStorage (goaltracker_folders_v1) → useFolders → SideDrawer / FolderPick
 - `expo-notifications` üzerinden çalışır
 - Her hedef için `reminderDays` (varsayılan `[3, 1]`) kadar önceden zamanlanmış bildirim oluşturulur
 - Android'de `goal-reminders` kanalı kullanılır (HIGH importance)
-- `CALENDAR` trigger tipi tercih edilir (en güvenilir Android desteği)
+- Hatırlatma saati kullanıcı ayarıdır (`app_reminder_time`, yan menüden değiştirilir)
+- Her açılışta `rescheduleAllNotifications` tüm hatırlatıcıları en yakın tarihliden başlayarak yeniden kurar (iOS 64 / Android ~500 bekleyen bildirim sınırı için üst sınır uygulanır)
+- Bildirime dokunulunca ilgili hedefin detayı açılır (`listenForGoalNotificationTaps`)
+- Pomodoro/zamanlayıcı bitişi için `scheduleCounterNotification` kullanılır
+- Tüm bildirim işlemleri `notifications.js` içindeki sıradan (queue) geçer
 
 ---
 
@@ -144,7 +164,22 @@ AsyncStorage (goaltracker_folders_v1) → useFolders → SideDrawer / FolderPick
 
 - `exportBackup()` → JSON dosyası oluşturur, `expo-sharing` ile paylaşır
 - `importBackup()` → `expo-document-picker` ile JSON seçilir, AsyncStorage'a yazılır
-- Hem yeni (`{ version, goals, folders }`) hem eski (düz array) format desteklenir
+- Yedek içeriği: `{ version, goals, folders, counters, settings }` (ayarlar: tema, dil, hatırlatma saati); eski formatlar (`{ version, goals, folders }`, düz array) da okunur
+- Tüm içe aktarılan veri `backupSchema.js` → `parseBackupData` ile doğrulanır; yeni alan eklerken oraya da ekle
+- `expo-file-system` için **`expo-file-system/legacy`** içe aktarılır (SDK 54'te ana paketteki eski API hata fırlatır)
+- Google Drive: değişiklikler `scheduleDriveSync()` ile gecikmeli ve birleştirilerek yüklenir; otomatik senkron asla etkileşimli giriş açmaz
+- Senkron açılırken Drive'da yedek varsa kullanıcıya hangisinin korunacağı sorulur
+- Çakışma denetimi: Drive'daki yedeğin `modifiedTime` değeri `drive_remote_rev` ile uyuşmuyorsa (başka cihaz yazmış) otomatik yükleme yapılmaz; yan menüde "Çöz" ile kullanıcı seçer. Birleştirme (merge) **yoktur**
+
+---
+
+## Günlük Takip Hedefleri
+
+- Hedef eklerken tür: Tek Seferlik / Günlük Takip / Tekrarlı
+- Takip hedefi `startDate..deadline` (dahil) aralığındaki her gün için `dayLog` kaydı tutar; hesaplar `utils/tracking.js` içindedir
+- `progress` yapılan gün oranından otomatik hesaplanır; tüm günler işaretlenince hedef tamamlanır
+- Listede kartın kutucuğu bugünü işaretler (bugün aralıktaysa); hedefi bitirmek için sağa kaydırma kullanılır
+- Günlük hatırlatma: önümüzdeki 7 günün işaretlenmemiş günleri için bildirim kurulur; her açılışta ve işaretlemede yenilenir
 
 ---
 
@@ -168,7 +203,11 @@ npx expo start --android
 # iOS simülatör
 npx expo start --ios
 
-# Üretim build (EAS)
+# Testler (ikisi birden; ayrı ayrı: npm run test:unit / npm run test:ui)
+npm test
+
+# Üretim build (EAS) — versionCode EAS'ta tutulur ve her production build'de otomatik artar
+# (eas.json: appVersionSource "remote" + autoIncrement; app.config.js'teki versionCode kullanılmaz)
 eas build --platform android --profile production
 eas build --platform ios --profile production
 
@@ -184,5 +223,7 @@ eas submit --platform android
 2. **AsyncStorage key'leri değiştirilmez** — veri kayıplarına yol açar; migrasyon gerekiyorsa yeni key kullan ve eski key'i oku.
 3. **`t()` fonksiyonu kullan** — bileşenlere hiçbir zaman sabit Türkçe/İngilizce string yazılmaz.
 4. **`useCallback` ve `useRef`** — `App.js` ve büyük hook'larda performans için bunları kullan.
-5. **Yinelenen hedefler** — tamamlanınca `createNextInstance` ile bir sonraki örnekleri otomatik oluşturulur.
+5. **Yinelenen hedefler** — tamamlanınca `utils/recurrence.js` → `createNextInstance` ile bir sonraki örnekleri otomatik oluşturulur (aylık tekrar gerçek takvim ayıdır).
 6. **Bildirimler** — hedef oluşturma/güncelleme/silme işlemlerinde `scheduleGoalNotifications` / `cancelGoalNotifications` çağrılır.
+7. **Reklam ve analitik onayı** — reklam SDK'sı yalnızca `utils/consent.js` → `initAdsWithConsent` üzerinden başlatılır (Google UMP).
+8. **Saf mantık modülleri** (`dateUtils`, `recurrence`, `tracking`, `backupSchema`) React/AsyncStorage içe aktarmaz ve kendi aralarında `.js` uzantısıyla import eder — Node ile test edilebilmeleri için. Değişiklikten sonra `npm test` çalıştır.

@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 const FILTER_KEYS = [
     { key: 'all',       tKey: 'filter.all' },
     { key: 'active',    tKey: 'filter.active' },
+    { key: 'overdue',   tKey: 'filter.overdue' },
     { key: 'completed', tKey: 'filter.completed' },
     { key: 'pinned',    tKey: 'filter.pinned' },
 ];

@@ -8,6 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Typography, Spacing, Radii } from '../constants/theme';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { scheduleCounterNotification, cancelCounterNotification } from '../utils/notifications';
 
 
 const POM_WORK = 25 * 60;
@@ -139,6 +140,29 @@ export default function CounterModal({
         }, 500);
         return () => clearInterval(id);
     }, [pomRunning]);
+
+    // Bitiş bildirimi: uygulama arka plandayken JS zamanlayıcıları durduğu için süre dolduğunda
+    // kullanıcı ancak sistem bildirimiyle haberdar olabilir. Duraklat/sıfırla bildirimi iptal eder.
+    useEffect(() => {
+        if (pomRunning) {
+            scheduleCounterNotification(
+                'pomodoro',
+                pomSecsRef.current,
+                t('counter.title'),
+                pomPhaseRef.current === 'work' ? t('counter.notifWorkDone') : t('counter.notifBreakDone'),
+            );
+        } else {
+            cancelCounterNotification('pomodoro');
+        }
+    }, [pomRunning]);
+
+    useEffect(() => {
+        if (timerRunning) {
+            scheduleCounterNotification('timer', timerSecs, t('counter.title'), t('counter.notifTimerDone'));
+        } else {
+            cancelCounterNotification('timer');
+        }
+    }, [timerRunning]);
 
     function handlePomPhaseEnd() {
         const phase = pomPhaseRef.current;

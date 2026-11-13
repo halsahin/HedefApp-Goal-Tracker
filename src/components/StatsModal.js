@@ -8,6 +8,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { CATEGORIES, getCategoryLabel, CATEGORY_ICON_MAP } from '../constants/categories';
 import { calcRemainingDays } from '../utils/dateUtils';
+import { trackingStats } from '../utils/tracking';
 
 export default function StatsModal({ visible, onClose, goals }) {
     const { colors } = useTheme();
@@ -27,7 +28,23 @@ export default function StatsModal({ visible, onClose, goals }) {
             count: goals.filter(g => g.category === cat.key).length,
         })).filter(c => c.count > 0);
 
-        return { total, completed, active, overdue, rate, byCategory };
+        // Günlük takip hedefleri: toplam yapılan gün, en uzun seri ve tutturma oranı
+        const tracked = goals.filter(g => g.tracking);
+        let trackDone = 0, trackMissed = 0, trackLongest = 0;
+        for (const g of tracked) {
+            const s = trackingStats(g);
+            trackDone += s.done;
+            trackMissed += s.missed;
+            if (s.longest > trackLongest) trackLongest = s.longest;
+        }
+        const tracking = {
+            count: tracked.length,
+            done: trackDone,
+            longest: trackLongest,
+            rate: trackDone + trackMissed > 0 ? Math.round(trackDone / (trackDone + trackMissed) * 100) : 0,
+        };
+
+        return { total, completed, active, overdue, rate, byCategory, tracking };
     }, [goals, t]);
 
     return (
@@ -66,6 +83,20 @@ export default function StatsModal({ visible, onClose, goals }) {
                         </View>
                     </View>
 
+                    {stats.tracking.count > 0 && (
+                        <View style={[styles.catCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+                                {t('tracking.title')}
+                            </Text>
+                            <View style={styles.trackRow}>
+                                <TrackStat value={stats.tracking.count} label={t('stats.trackingGoals')} colors={colors} />
+                                <TrackStat value={stats.tracking.done} label={t('tracking.doneLabel')} colors={colors} color={colors.success} />
+                                <TrackStat value={stats.tracking.longest} label={t('stats.trackingLongest')} colors={colors} color={colors.accentDark} />
+                                <TrackStat value={`${stats.tracking.rate}%`} label={t('stats.trackingRate')} colors={colors} />
+                            </View>
+                        </View>
+                    )}
+
                     {stats.byCategory.length > 0 && (
                         <View style={[styles.catCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
@@ -98,6 +129,15 @@ export default function StatsModal({ visible, onClose, goals }) {
     );
 }
 
+function TrackStat({ value, label, colors, color }) {
+    return (
+        <View style={styles.trackStat}>
+            <Text style={[styles.trackValue, { color: color || colors.text }]}>{value}</Text>
+            <Text style={[styles.trackLabel, { color: colors.textMuted }]}>{label}</Text>
+        </View>
+    );
+}
+
 function StatBox({ label, value, icon, colors, accent, success, danger }) {
     const valueColor = accent ? colors.accentDark : success ? colors.success : danger ? colors.danger : colors.text;
     return (
@@ -112,6 +152,10 @@ function StatBox({ label, value, icon, colors, accent, success, danger }) {
 }
 
 const styles = StyleSheet.create({
+    trackRow: { flexDirection: 'row' },
+    trackStat: { flex: 1, alignItems: 'center', paddingHorizontal: 2 },
+    trackValue: { fontSize: 22, fontWeight: '700' },
+    trackLabel: { fontSize: Typography.xs, marginTop: 2, textAlign: 'center' },
     root: { flex: 1 },
     header: {
         flexDirection: 'row',

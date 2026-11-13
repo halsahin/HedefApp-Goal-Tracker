@@ -15,6 +15,7 @@ export default function FolderPickerModal({
     visible, onClose,
     folders, activeFolderId,
     onSelectFolder, onAddFolder, onRenameFolder, onDeleteFolder,
+    title, hideAll = false, // toplu taşımada: özel başlık ve "Tüm Hedefler" seçeneği olmadan
 }) {
     const { t } = useLanguage();
     const { colors, isDark } = useTheme();
@@ -101,7 +102,7 @@ export default function FolderPickerModal({
     }
 
     const allItem = { id: null, name: t('folder.all'), isAll: true };
-    const listData = [allItem, ...folders];
+    const listData = hideAll ? folders : [allItem, ...folders];
 
     return (
         <Modal visible={visible} transparent animationType="none" onRequestClose={close}>
@@ -120,7 +121,7 @@ export default function FolderPickerModal({
 
                     {/* Başlık */}
                     <View style={[styles.header, { borderBottomColor: colors.border }]}>
-                        <Text style={[styles.title, { color: colors.text }]}>{t('folder.title')}</Text>
+                        <Text style={[styles.title, { color: colors.text }]}>{title || t('folder.title')}</Text>
                         <View style={styles.headerActions}>
                             <TouchableOpacity
                                 onPress={() => {

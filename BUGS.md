@@ -37,3 +37,20 @@
 | BUG-26 | `googleDrive.js` | Otomatik senkron her değişiklikte paralel yükleme başlatıyordu; Drive'da dosya yokken iki istek çakışınca yedek dosyası çoğalabiliyordu. Yüklemeler artık sıraya alınıyor. |
 | BUG-27 | `notifications.js` | `expo-notifications` 0.32'de kullanımdan kalkan `shouldShowAlert` yanına `shouldShowBanner` / `shouldShowList` eklendi (ön planda bildirim görünmeme riski). |
 | BUG-28 | `useFolders.js`, `useCounterRecords.js` | AsyncStorage okuma hatasında `loaded` hiç `true` olmuyordu; `.catch` eklendi. |
+| BUG-29 | `AddGoalModal.js`, `GoalDetailModal.js` | Özel hatırlatma günü (ör. 5 gün önce) eklendiğinde çip, kapsam dışındaki `active` değişkenine eriştiği için `ReferenceError` ile ekran çöküyordu. Tema rengi doğrudan kullanılıyor. |
+| BUG-30 | `backup.js` | Expo SDK 54'te `expo-file-system` ana paketindeki eski API (`writeAsStringAsync`, `cacheDirectory` vb.) çalışma anında hata fırlatıyor; yerel yedek alma/geri yükleme her zaman "hata" veriyordu. `expo-file-system/legacy` içe aktarımına geçildi. |
+| BUG-31 | `googleDrive.js`, `SideDrawer.js` | Otomatik senkron, oturum yokken her hedef değişikliğinde etkileşimli Google giriş ekranını açıyordu (uygulama yeniden açıldığında `getCurrentUser()` null döndüğü için de). Otomatik senkron artık yalnızca sessiz giriş dener; etkileşimli giriş senkron açılırken ve Drive'dan indirirken yapılır. Giriş başarısızsa senkron açılmaz. |
+| BUG-32 | `googleDrive.js` | Drive dosya sorgusu hata verdiğinde "dosya yok" sayılıp yeni yedek dosyası oluşturuluyordu (kopya yedekler); indirmede ise "geçersiz yedek" mesajı çıkıyordu. Hata artık çağırana iletiliyor; 401'de önbellekteki token temizleniyor. |
+| BUG-33 | `backup.js` | Yedek doğrulaması alt görev/not içeriklerini, tarihleri ve `recurring` alanını denetlemiyordu; bozuk veya kötü niyetli bir yedek dosyası uygulamayı açılışta çökertebiliyordu. Alanlar tip ve biçim olarak doğrulanıyor. |
+| BUG-34 | `notifications.js`, `App.js` | Yedekten geri yükleme sonrası eski hedeflerin bildirimleri kalıyor, geri gelen hedeflerin bildirimleri kurulmuyordu. `rescheduleAllNotifications` eklendi. |
+| BUG-35 | `GoalDetailModal.js` | Başlangıç ve bitiş tarihi aynı olduğunda zaman çizelgesi `NaN%` üretiyordu. |
+| BUG-36 | `CalendarModal.js` | Takvim lejantındaki sabit Türkçe metinler `t()` ile çevrildi. |
+| BUG-37 | `.env.example` | App ID değişken adları `app.config.js`'in okuduğu `EXPO_PUBLIC_ADMOB_*` adlarıyla eşleştirildi. |
+| BUG-38 | `SideDrawer.js`, `googleDrive.js` | Yeni cihazda Drive senkronu açılıp bir hedef eklenince buluttaki yedek neredeyse boş veriyle eziliyordu. Senkron açılırken Drive'da yedek varsa kullanıcıya "Drive'dakini indir / Bu cihazdakini yükle" soruluyor. |
+| BUG-39 | `googleDrive.js`, hook'lar | Her değişiklikte (her alt görev işaretinde) tüm veri Drive'a yükleniyordu. Yüklemeler 2,5 sn geciktirilip birleştiriliyor; uygulama arka plana geçerken bekleyen yükleme hemen gönderiliyor. |
+| BUG-40 | `recurrence.js` | Aylık tekrar sabit 30 gün ekliyordu (31 Ocak → 2 Mart). Gerçek takvim ayı kullanılıyor; ayın günü `anchorDay` ile korunuyor. |
+| BUG-41 | `notifications.js` | Bildirim iptal/kurma çağrıları sırasız çalışabiliyordu; iOS'un 64 bekleyen bildirim sınırı aşıldığında uzak tarihli hatırlatıcılar sessizce düşüyordu. İşlemler sıraya alındı, en yakın tarihliler öncelikli kuruluyor ve her açılışta yenileniyor. |
+| BUG-42 | `translations.js` | zh/ja/ko dillerinde 17, tüm dillerde 2 (`detail.discard*`) çeviri anahtarı eksikti; ekranda ham anahtar görünüyordu. |
+| BUG-43 | `useGoals.js`, `recurrence.js` | Tekrarlı hedefin tamamlanması geri alındığında otomatik oluşturulan sonraki örnek listede kalıyor, hedef çiftleniyordu. Örnekler `spawnedFrom` ile işaretleniyor; dokunulmamışsa geri almada kaldırılıyor. |
+| BUG-44 | `googleDrive.js` | İki cihaz aynı Drive hesabına senkron yaptığında son yazan diğerinin değişikliklerini sessizce siliyordu. Drive'daki yedek başka cihazdan değişmişse otomatik yükleme durduruluyor ve kullanıcıya soruluyor. |
+| BUG-45 | `App.js` | Dil değiştirildiğinde kurulu bildirimler eski dilde kalıyordu; dil değişiminde yeniden kuruluyor. |

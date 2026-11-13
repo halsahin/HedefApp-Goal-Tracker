@@ -28,15 +28,9 @@ try {
 /**
  * AdBannerComponent — ekranın altında sabit duran reklam bandı.
  *
- * TEST MODU:
- *   Şu an Google'ın resmi test ID'leri kullanılıyor. Gerçek reklamlar
- *   yayına girmez, uygulama asla askıya alınmaz.
- *
- * CANLI YAYINA GEÇİŞ:
- *   1. AdMob konsolunda uygulamanızı kaydedin.
- *   2. Aşağıdaki ANDROID_AD_UNIT_ID ve IOS_AD_UNIT_ID sabitlerini
- *      konsoldan aldığınız gerçek Ad Unit ID'leriyle değiştirin.
- *   3. app.json'daki androidAppId / iosAppId alanlarını da güncelleyin.
+ * Ad Unit ID'leri `src/config/ads.js` (yerel) veya EXPO_PUBLIC_*_AD_UNIT_ID (EAS) üzerinden gelir;
+ * App ID'leri `app.config.js` içinde ayarlanır. ID yoksa bant gösterilmez.
+ * Bileşen, kullanıcı onayı (UMP) alındıktan sonra App.js tarafından render edilir.
  */
 
 const AD_UNIT_ID = Platform.OS === 'android' ? ANDROID_AD_UNIT_ID : IOS_AD_UNIT_ID;

@@ -7,18 +7,22 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Typography, Spacing, Radii, Shadows } from '../constants/theme';
 import { Feather } from '@expo/vector-icons';
 import { CATEGORIES, CATEGORY_ICON_MAP, getCategoryLabel } from '../constants/categories';
-import { calcRemainingDays, formatDate, deadlineFromDays } from '../utils/dateUtils';
+import { calcRemainingDays, formatDate, deadlineFromDays, toDateStr } from '../utils/dateUtils';
 import { addGoalToCalendar } from '../utils/calendar';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
+import TrackingSection from './TrackingSection';
 
 const PROGRESS_OPTIONS = [0, 25, 50, 75, 100];
 const REMINDER_OPTIONS = [7, 3, 1, 0];
+const RECURRING_OPTIONS = ['none', 'daily', 'weekly', 'monthly', 'custom'];
+const RECURRING_DAYS = { daily: 1, weekly: 7, monthly: 30 };
 
 export default function GoalDetailModal({
     goal, visible, onClose,
     onUpdateGoal, onAddUpdate, onEditUpdate, onDeleteUpdate,
     onAddSubtask, onToggleSubtask, onDeleteSubtask,
+    onToggleDay, onSetDayDetails,
 }) {
     const { t, locale } = useLanguage();
     const { colors, isDark } = useTheme();
@@ -33,6 +37,12 @@ export default function GoalDetailModal({
     const [editProgress, setEditProgress] = useState(0);
     const [editReminderDays, setEditReminderDays] = useState([3, 1]);
     const [editRecurring, setEditRecurring] = useState(null);
+    const [editInterval, setEditInterval] = useState('7');
+    // Günlük takip alanları
+    const [editStartDate, setEditStartDate] = useState(new Date());
+    const [showStartPicker, setShowStartPicker] = useState(false);
+    const [editUnit, setEditUnit] = useState('');
+    const [editDailyReminder, setEditDailyReminder] = useState(true);
     const [customReminderInput, setCustomReminderInput] = useState('');
     const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -61,20 +71,50 @@ export default function GoalDetailModal({
         setEditProgress(g.progress || 0);
         setEditReminderDays(g.reminderDays ?? [3, 1]);
         setEditRecurring(g.recurring ?? null);
+        setEditInterval(String(g.recurring?.interval ?? 7));
+        setEditStartDate(new Date((g.startDate || g.deadline) + 'T12:00:00'));
+        setShowStartPicker(false);
+        setEditUnit(g.trackingUnit || '');
+        setEditDailyReminder(g.dailyReminder !== false);
         setCustomReminderInput('');
+    }
+
+    // Formdaki bitiş tarihi (YYYY-MM-DD); gün sayısı geçersizse null
+    function currentEditDeadline() {
+        if (editDeadlineMode === 'date') return toDateStr(editDate);
+        const d = parseInt(editDays, 10);
+        return isNaN(d) || d < 1 ? null : deadlineFromDays(d);
+    }
+
+    // Formdaki tekrar ayarı; tip değişmediyse mevcut ayar (ör. aylık seri günü) korunur
+    function currentEditRecurring() {
+        if (goal.tracking || !editRecurring) return null;
+        const type = editRecurring.type;
+        if (type === 'custom') {
+            const n = parseInt(editInterval, 10);
+            return { type, interval: !isNaN(n) && n >= 1 ? n : 7 };
+        }
+        if (goal.recurring?.type === type) return goal.recurring;
+        return { type, interval: RECURRING_DAYS[type] ?? 7 };
+    }
+
+    // Takip hedefinde başlangıç bitişten sonra olamaz
+    function currentEditStart(deadline) {
+        const start = toDateStr(editStartDate);
+        return deadline && start > deadline ? deadline : start;
     }
 
     function saveGoalEdit() {
         if (!editName.trim()) return;
-        let deadline;
-        if (editDeadlineMode === 'date') {
-            deadline = [editDate.getFullYear(), String(editDate.getMonth() + 1).padStart(2, '0'), String(editDate.getDate()).padStart(2, '0')].join('-');
-        } else {
-            const d = parseInt(editDays, 10);
-            if (isNaN(d) || d < 1) return;
-            deadline = deadlineFromDays(d);
+        const deadline = currentEditDeadline();
+        if (!deadline) return;
+        const data = { name: editName, category: editCategory, deadline, description: editDesc, progress: editProgress, reminderDays: editReminderDays, recurring: currentEditRecurring() };
+        if (goal.tracking) {
+            data.startDate = currentEditStart(deadline);
+            data.trackingUnit = editUnit;
+            data.dailyReminder = editDailyReminder;
         }
-        onUpdateGoal(goal.id, { name: editName, category: editCategory, deadline, description: editDesc, progress: editProgress, reminderDays: editReminderDays, recurring: editRecurring });
+        onUpdateGoal(goal.id, data);
         setIsEditingGoal(false);
         Keyboard.dismiss();
     }
@@ -83,7 +123,15 @@ export default function GoalDetailModal({
         const hasChanges = editName.trim() !== goal.name ||
             editCategory !== goal.category ||
             editDesc !== (goal.description || '') ||
-            editProgress !== (goal.progress || 0);
+            editProgress !== (goal.progress || 0) ||
+            (editDeadlineMode === 'days' ? editDays.trim() !== '' : currentEditDeadline() !== goal.deadline) ||
+            JSON.stringify(currentEditRecurring()) !== JSON.stringify(goal.recurring ?? null) ||
+            (goal.tracking && (
+                toDateStr(editStartDate) !== (goal.startDate || goal.deadline) ||
+                editUnit.trim() !== (goal.trackingUnit || '') ||
+                editDailyReminder !== (goal.dailyReminder !== false)
+            )) ||
+            JSON.stringify([...editReminderDays].sort()) !== JSON.stringify([...(goal.reminderDays ?? [3, 1])].sort());
         if (hasChanges) {
             Alert.alert(
                 t('detail.cancel'),
@@ -161,7 +209,8 @@ export default function GoalDetailModal({
         const start = new Date(goal.startDate + 'T00:00:00').getTime();
         const end = new Date(goal.deadline + 'T00:00:00').getTime();
         const now = Date.now();
-        timelineProgress = Math.max(0, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
+        const ratio = end > start ? (now - start) / (end - start) : 1;
+        timelineProgress = Number.isFinite(ratio) ? Math.max(0, Math.min(100, Math.round(ratio * 100))) : 0;
     }
 
     return (
@@ -293,6 +342,96 @@ export default function GoalDetailModal({
                                         </View>
                                     )}
 
+                                    {goal.tracking && <>
+                                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t('addModal.startDate')}</Text>
+                                        <TouchableOpacity
+                                            style={[styles.dateTrigger, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                                            onPress={() => setShowStartPicker(v => !v)}
+                                            activeOpacity={0.8}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Feather name="calendar" size={16} color={colors.text} />
+                                                <Text style={[styles.dateTriggerText, { color: colors.text, marginLeft: 6 }]}>
+                                                    {editStartDate.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}
+                                                </Text>
+                                            </View>
+                                            <Text style={[styles.dateTriggerArrow, { color: colors.textMuted }]}>{showStartPicker ? '▴' : '▾'}</Text>
+                                        </TouchableOpacity>
+                                        {showStartPicker && (
+                                            <DateTimePicker
+                                                value={editStartDate}
+                                                mode="date"
+                                                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                                onChange={(_, date) => {
+                                                    if (Platform.OS === 'android') setShowStartPicker(false);
+                                                    if (date) setEditStartDate(date);
+                                                }}
+                                            />
+                                        )}
+
+                                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t('tracking.unit')}</Text>
+                                        <TextInput
+                                            style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surface }]}
+                                            value={editUnit}
+                                            onChangeText={setEditUnit}
+                                            placeholder={t('tracking.unitPlaceholder')}
+                                            placeholderTextColor={colors.textLight}
+                                            maxLength={20}
+                                        />
+                                        <TouchableOpacity
+                                            style={[styles.reminderChip, { alignSelf: 'flex-start', marginBottom: Spacing.sm,
+                                                backgroundColor: editDailyReminder ? colors.accentBg : colors.surface2,
+                                                borderColor: editDailyReminder ? colors.accentDark : colors.border }]}
+                                            onPress={() => setEditDailyReminder(v => !v)}
+                                            activeOpacity={0.75}
+                                            accessibilityRole="switch"
+                                            accessibilityState={{ checked: editDailyReminder }}
+                                        >
+                                            <Text style={[styles.reminderChipText, { color: editDailyReminder ? (isDark ? colors.accent : colors.accentDark) : colors.textMuted }, editDailyReminder && { fontWeight: '700' }]}>
+                                                <Feather name={editDailyReminder ? 'bell' : 'bell-off'} size={12} /> {t('tracking.dailyReminder')}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </>}
+
+                                    {!goal.tracking && <>
+                                    <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t('addModal.recurring')}</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll} keyboardShouldPersistTaps="handled">
+                                        {RECURRING_OPTIONS.map(type => {
+                                            const active = (editRecurring?.type ?? 'none') === type;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={type}
+                                                    style={[styles.catChip,
+                                                        { backgroundColor: colors.surface2, borderColor: colors.border },
+                                                        active && { backgroundColor: colors.accentBg, borderColor: colors.accentDark }
+                                                    ]}
+                                                    onPress={() => setEditRecurring(type === 'none' ? null : { type })}
+                                                    activeOpacity={0.75}
+                                                >
+                                                    <Text style={[styles.catChipText, { color: colors.textMuted },
+                                                        active && { fontWeight: '700', color: isDark ? colors.accent : colors.accentDark }
+                                                    ]}>
+                                                        {type === 'none' ? t('addModal.oneTime') : t('addModal.' + type)}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </ScrollView>
+                                    {editRecurring?.type === 'custom' && (
+                                        <View style={[styles.daysRow, { marginBottom: Spacing.sm }]}>
+                                            <TextInput
+                                                style={[styles.input, { flex: 1, borderColor: colors.border, color: colors.text, backgroundColor: colors.surface }]}
+                                                placeholder="7"
+                                                placeholderTextColor={colors.textLight}
+                                                value={editInterval}
+                                                onChangeText={setEditInterval}
+                                                keyboardType="numeric"
+                                                maxLength={3}
+                                            />
+                                            <Text style={[styles.daysUnit, { color: colors.textMuted }]}>{t('detail.daysUnit')}</Text>
+                                        </View>
+                                    )}
+
                                     <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t('detail.progress')}</Text>
                                     <View style={styles.progressBtns}>
                                         {PROGRESS_OPTIONS.map(p => (
@@ -311,6 +450,8 @@ export default function GoalDetailModal({
                                             </TouchableOpacity>
                                         ))}
                                     </View>
+
+                                    </>}
 
                                     <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t('reminder.label')}</Text>
                                     <View style={styles.reminderChips}>
@@ -343,7 +484,7 @@ export default function GoalDetailModal({
                                                 activeOpacity={0.75}
                                             >
                                                 <Text style={[styles.reminderChipText, { color: isDark ? colors.accent : colors.accentDark, fontWeight: '700' }]}>
-                                                    {t('reminder.custom', { n: days })} <Feather name="x" size={12} color={active ? colors.accentDark : colors.textMuted} />
+                                                    {t('reminder.custom', { n: days })} <Feather name="x" size={12} color={isDark ? colors.accent : colors.accentDark} />
                                                 </Text>
                                             </TouchableOpacity>
                                         ))}
@@ -423,6 +564,14 @@ export default function GoalDetailModal({
                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                     <Feather name="repeat" size={10} color={isDark ? colors.accent : colors.accentDark} />
                                                     <Text style={[styles.doneBadgeText, { color: isDark ? colors.accent : colors.accentDark, marginLeft: 4 }]}>{t('detail.recurring')}</Text>
+                                                </View>
+                                            </View>
+                                        )}
+                                        {goal.recurring && goal.streak > 0 && (
+                                            <View style={[styles.doneBadge, { backgroundColor: colors.accentBg }]}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <Feather name="zap" size={10} color={isDark ? colors.accent : colors.accentDark} />
+                                                    <Text style={[styles.doneBadgeText, { color: isDark ? colors.accent : colors.accentDark, marginLeft: 4 }]}>{t('goalCard.streak', { n: goal.streak })}</Text>
                                                 </View>
                                             </View>
                                         )}
@@ -520,6 +669,11 @@ export default function GoalDetailModal({
                             )}
                         </View>
                     </View>
+
+                    {/* Günlük takip */}
+                    {!isEditingGoal && goal.tracking && (
+                        <TrackingSection goal={goal} onToggleDay={onToggleDay} onSetDayDetails={onSetDayDetails} />
+                    )}
 
                     {/* Subtasks section */}
                     {!isEditingGoal && (

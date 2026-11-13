@@ -106,9 +106,9 @@ export default function CalendarModal({ visible, onClose, goals }) {
                     )}
 
                     <View style={[styles.legend, { borderTopColor: colors.border }]}>
-                        <LegendDot color={colors.danger} label="Aktif" />
-                        <LegendDot color={colors.accent} label="Tekrarlayan" />
-                        <LegendDot color={colors.success} label="Tamamlanan" />
+                        <LegendDot color={colors.danger} label={t('stats.active')} />
+                        <LegendDot color={colors.accent} label={t('detail.recurring')} />
+                        <LegendDot color={colors.success} label={t('stats.completed')} />
                     </View>
 
                     {selectedDate && (

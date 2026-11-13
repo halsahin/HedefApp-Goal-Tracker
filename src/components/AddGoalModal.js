@@ -9,6 +9,7 @@ import { Typography, Spacing, Radii, Shadows } from '../constants/theme';
 import { Feather } from '@expo/vector-icons';
 import { CATEGORIES } from '../constants/categories';
 import { defaultDeadline, deadlineFromDays, generateId } from '../utils/dateUtils';
+import { firstDeadline } from '../utils/recurrence';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -38,13 +39,15 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
   const [startDate, setStartDate] = useState(null);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [goalType, setGoalType] = useState('once'); // 'once' | 'recurring'
+  const [goalType, setGoalType] = useState('once'); // 'once' | 'tracking' | 'recurring'
   const [recurringType, setRecurringType] = useState('weekly');
   const [recurringInterval, setRecurringInterval] = useState('7');
   const [subtasks, setSubtasks] = useState([]);
   const [subtaskInput, setSubtaskInput] = useState('');
   const [reminderDays, setReminderDays] = useState([3, 1]);
   const [customReminderInput, setCustomReminderInput] = useState('');
+  const [trackingUnit, setTrackingUnit] = useState('');
+  const [dailyReminder, setDailyReminder] = useState(true);
 
   const nameRef = useRef(null);
   const translateY = useRef(new Animated.Value(0)).current;
@@ -69,6 +72,8 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
       setSubtaskInput('');
       setReminderDays([3, 1]);
       setCustomReminderInput('');
+      setTrackingUnit('');
+      setDailyReminder(true);
       translateY.setValue(screenHeight);
       Animated.spring(translateY, {
         toValue: 0,
@@ -113,7 +118,9 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
     let deadline;
     let recurring = null;
 
-    if (goalType === 'once') {
+    const tracking = goalType === 'tracking';
+
+    if (goalType !== 'recurring') {
       if (deadlineMode === 'date') {
         deadline = [
           selectedDate.getFullYear(),
@@ -123,7 +130,8 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
       } else {
         const d = parseInt(daysInput, 10);
         if (isNaN(d) || d < 1) return;
-        deadline = deadlineFromDays(d);
+        // Günlük takipte "30 gün" bugün dahil tam 30 gün demektir
+        deadline = deadlineFromDays(tracking ? d - 1 : d);
       }
     } else {
       // Recurring: auto-calculate first deadline based on interval
@@ -132,13 +140,13 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
         recurringType === 'weekly'  ? 7  :
         recurringType === 'monthly' ? 30 :
         (Number(recurringInterval) || 7);
-      deadline = deadlineFromDays(interval);
       recurring = { type: recurringType, interval };
+      deadline = firstDeadline(recurring);
     }
     const startDateStr = startDate
       ? [startDate.getFullYear(), String(startDate.getMonth() + 1).padStart(2, '0'), String(startDate.getDate()).padStart(2, '0')].join('-')
       : null;
-    onSubmit({ name, category, deadline, description, startDate: startDateStr, progress, recurring, subtasks, reminderDays });
+    onSubmit({ name, category, deadline, description, startDate: startDateStr, progress, recurring, subtasks, reminderDays, tracking, trackingUnit, dailyReminder });
     animatedClose();
   }
 
@@ -228,7 +236,7 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textMuted }]}>{t('addModal.goalType')}</Text>
               <View style={[styles.toggle, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-                {['once', 'recurring'].map(type => (
+                {['once', 'tracking', 'recurring'].map(type => (
                   <TouchableOpacity
                     key={type}
                     style={[styles.toggleBtn, goalType === type && [styles.toggleBtnActive, { backgroundColor: colors.surface }]]}
@@ -238,15 +246,18 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
                     <Text style={[styles.toggleBtnText, { color: colors.textMuted },
                       goalType === type && { fontWeight: '700', color: colors.text }
                     ]}>
-                      {type === 'once' ? t('addModal.oneTime') : t('addModal.recurringType')}
+                      {type === 'once' ? t('addModal.oneTime') : type === 'tracking' ? t('addModal.tracking') : t('addModal.recurringType')}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
+              {goalType === 'tracking' && (
+                <Text style={[styles.typeHint, { color: colors.textLight }]}>{t('addModal.trackingHint')}</Text>
+              )}
             </View>
 
             {/* Tek Seferlik: Bitiş Tarihi */}
-            {goalType === 'once' && (
+            {goalType !== 'recurring' && (
               <>
                 <View style={styles.formGroup}>
                   <Text style={[styles.label, { color: colors.textMuted }]}>{t('addModal.deadline')}</Text>
@@ -316,6 +327,36 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
               </>
             )}
 
+            {/* Günlük takip ayarları */}
+            {goalType === 'tracking' && (
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.textMuted }]}>
+                  {t('tracking.unit')} <Text style={[styles.optional, { color: colors.textLight }]}>{t('addModal.startDateOptional')}</Text>
+                </Text>
+                <TextInput
+                  style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surface }]}
+                  placeholder={t('tracking.unitPlaceholder')}
+                  placeholderTextColor={colors.textLight}
+                  value={trackingUnit}
+                  onChangeText={setTrackingUnit}
+                  maxLength={20}
+                />
+                <TouchableOpacity
+                  style={[styles.reminderChip, { alignSelf: 'flex-start', marginTop: Spacing.sm,
+                    backgroundColor: dailyReminder ? colors.accentBg : colors.surface2,
+                    borderColor: dailyReminder ? colors.accentDark : colors.border }]}
+                  onPress={() => setDailyReminder(v => !v)}
+                  activeOpacity={0.75}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: dailyReminder }}
+                >
+                  <Text style={[styles.reminderChipText, { color: dailyReminder ? (isDark ? colors.accent : colors.accentDark) : colors.textMuted }, dailyReminder && { fontWeight: '700' }]}>
+                    <Feather name={dailyReminder ? 'bell' : 'bell-off'} size={12} /> {t('tracking.dailyReminder')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Başlangıç Tarihi */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textMuted }]}>
@@ -348,8 +389,8 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
               )}
             </View>
 
-            {/* İlerleme */}
-            <View style={styles.formGroup}>
+            {/* İlerleme (günlük takipte işaretlenen günlerden otomatik hesaplanır) */}
+            {goalType !== 'tracking' && <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.textMuted }]}>{t('addModal.progress')}</Text>
               <View style={styles.progressBtns}>
                 {PROGRESS_OPTIONS.map(p => (
@@ -368,7 +409,7 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
+            </View>}
 
             {/* Tekrarlı: Tekrar tipi seçimi */}
             {goalType === 'recurring' && (
@@ -474,7 +515,7 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
                     activeOpacity={0.75}
                   >
                     <Text style={[styles.reminderChipText, { color: isDark ? colors.accent : colors.accentDark, fontWeight: '700' }]}>
-                      {t('reminder.custom', { n: days })} <Feather name="x" size={12} color={active ? colors.accentDark : colors.textMuted} />
+                      {t('reminder.custom', { n: days })} <Feather name="x" size={12} color={isDark ? colors.accent : colors.accentDark} />
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -558,6 +599,7 @@ export default function AddGoalModal({ visible, onClose, onSubmit }) {
 }
 
 const styles = StyleSheet.create({
+  typeHint: { fontSize: Typography.xs, marginTop: Spacing.xs, lineHeight: 16 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(10,10,30,0.45)',

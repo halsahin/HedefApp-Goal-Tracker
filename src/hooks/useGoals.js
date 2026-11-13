@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { generateId, calcRemainingDays } from '../utils/dateUtils';
+import { generateId, calcRemainingDays, toDateStr } from '../utils/dateUtils';
 import { TURKISH_LABEL_TO_KEY } from '../constants/categories';
-import { syncToDrive } from '../utils/googleDrive';
+import { scheduleDriveSync } from '../utils/googleDrive';
+import { createNextInstance } from '../utils/recurrence';
+import { trackingStats, setDayEntry } from '../utils/tracking';
 
 const STORAGE_KEY_V1 = 'goaltracker_v1';
 const STORAGE_KEY_V2 = 'goaltracker_v2';
@@ -10,6 +12,21 @@ const STORAGE_KEY_V2 = 'goaltracker_v2';
 function calcProgressFromSubtasks(subtasks) {
     if (!subtasks || subtasks.length === 0) return 0;
     return Math.round(subtasks.filter(s => s.completed).length / subtasks.length * 100);
+}
+
+// Günlük takip hedefinde ilerleme yapılan gün oranıdır; tüm günler işaretlenince hedef tamamlanır
+function withTrackingProgress(goal) {
+    const { total, done } = trackingStats(goal);
+    const progress = total > 0 ? Math.round(done / total * 100) : 0;
+    return { ...goal, progress, completed: goal.completed || (total > 0 && done === total) };
+}
+
+// Tamamlama geri alındığında kaldırılabilecek, kullanıcının henüz dokunmadığı otomatik örnek mi?
+function isUntouchedSpawn(g, parentId) {
+    return g.spawnedFrom === parentId
+        && !g.completed
+        && (g.updates || []).length === 0
+        && !(g.subtasks || []).some(s => s.completed);
 }
 
 function normaliseGoal(g) {
@@ -22,36 +39,13 @@ function normaliseGoal(g) {
         startDate: null,
         reminderDays: [3, 1],
         folderId: 'default',
+        tracking: false,
+        trackingUnit: '',
+        dailyReminder: true,
+        dayLog: {},
+        streak: 0,
         ...g,
         category: migratedCategory,
-    };
-}
-
-function createNextInstance(goal) {
-    const { type, interval } = goal.recurring;
-    const base = new Date(goal.deadline + 'T12:00:00');
-    const daysToAdd =
-        type === 'daily'   ? 1  :
-        type === 'weekly'  ? 7  :
-        type === 'monthly' ? 30 :
-        (Number(interval) || 7);
-    base.setDate(base.getDate() + daysToAdd);
-    const newDeadline = [
-        base.getFullYear(),
-        String(base.getMonth() + 1).padStart(2, '0'),
-        String(base.getDate()).padStart(2, '0'),
-    ].join('-');
-    return {
-        ...goal,
-        id: generateId(),
-        completed: false,
-        pinned: false,
-        createdAt: new Date().toISOString(),
-        deadline: newDeadline,
-        startDate: goal.deadline,
-        progress: 0,
-        subtasks: (goal.subtasks || []).map(s => ({ ...s, completed: false })),
-        updates: [],
     };
 }
 
@@ -102,15 +96,8 @@ export function useGoals(activeFolderId = null) {
             console.error('[useGoals] save error:', err);
         });
 
-        // Auto sync with Google Drive if enabled
-        AsyncStorage.getItem('drive_autosync').then(autoSync => {
-            if (autoSync === 'true') {
-                AsyncStorage.getItem('goaltracker_folders_v1').then(foldersRaw => {
-                    const folders = foldersRaw ? JSON.parse(foldersRaw) : [];
-                    syncToDrive(goals, folders).catch(err => console.log('Auto-sync error:', err));
-                });
-            }
-        });
+        // Google Drive otomatik senkronu açıksa (gecikmeli, birleştirilmiş) yükleme planla
+        scheduleDriveSync();
     }, [goals, loaded]);
 
     // ── CRUD: Goals ────────────────────────────────────────────
@@ -120,13 +107,18 @@ export function useGoals(activeFolderId = null) {
             name: data.name.trim(),
             category: data.category,
             deadline: data.deadline,
-            startDate: data.startDate || null,
+            // Günlük takip her zaman bir başlangıç gününe ihtiyaç duyar (varsayılan: bugün)
+            startDate: data.startDate || (data.tracking ? toDateStr(new Date()) : null),
             description: (data.description || '').trim(),
             completed: false,
             pinned: false,
             createdAt: new Date().toISOString(),
-            progress: data.progress || 0,
-            recurring: data.recurring || null,
+            progress: data.tracking ? 0 : (data.progress || 0),
+            recurring: data.tracking ? null : (data.recurring || null),
+            tracking: !!data.tracking,
+            trackingUnit: data.tracking ? (data.trackingUnit || '').trim().slice(0, 20) : '',
+            dailyReminder: data.dailyReminder !== false,
+            dayLog: {},
             subtasks: data.subtasks || [],
             reminderDays: data.reminderDays ?? [3, 1],
             folderId: data.folderId ?? 'default',
@@ -136,23 +128,61 @@ export function useGoals(activeFolderId = null) {
         return goal;
     }, []);
 
-    // Returns new recurring instance if created, else null
+    // Tamamlama durumunu değiştirir. { created, removedId } döner:
+    //  - created: yinelenen hedef tamamlandıysa oluşturulan bir sonraki örnek
+    //  - removedId: tamamlama geri alındıysa kaldırılan (dokunulmamış) sonraki örneğin id'si
     const toggleComplete = useCallback((id) => {
         // State updater'ı React'in zamanlamasına bağlı olduğundan sonucu dışarıda hesapla
         const goal = goalsRef.current.find(g => g.id === id);
-        if (!goal) return null;
+        if (!goal) return { created: null, removedId: null };
         const nowCompleted = !goal.completed;
-        const newGoal = nowCompleted && goal.recurring ? createNextInstance(goal) : null;
+        const created = nowCompleted && goal.recurring ? createNextInstance(goal) : null;
+        const removedId = !nowCompleted && goal.recurring
+            ? (goalsRef.current.find(g => isUntouchedSpawn(g, id))?.id ?? null)
+            : null;
         setGoals(prev => {
-            let updated = prev.map(g =>
-                g.id === id ? { ...g, completed: nowCompleted } : g
-            );
-            if (newGoal && !updated.some(g => g.id === newGoal.id)) {
-                updated = [newGoal, ...updated];
+            let updated = prev
+                .filter(g => g.id !== removedId)
+                .map(g => g.id === id ? { ...g, completed: nowCompleted } : g);
+            if (created && !updated.some(g => g.id === created.id)) {
+                updated = [created, ...updated];
             }
             return updated;
         });
-        return newGoal;
+        return { created, removedId };
+    }, []);
+
+    // ── Günlük takip ───────────────────────────────────────────
+    // Bir günün işaretini değiştirir. { done, autoCompleted } döner; hedef yoksa null.
+    const toggleDay = useCallback((goalId, date) => {
+        const goal = goalsRef.current.find(g => g.id === goalId);
+        if (!goal || !goal.tracking) return null;
+        const done = !goal.dayLog?.[date]?.done;
+        const after = withTrackingProgress({ ...goal, dayLog: setDayEntry(goal.dayLog, date, { done }) });
+        setGoals(prev => prev.map(g =>
+            g.id === goalId
+                ? withTrackingProgress({ ...g, dayLog: setDayEntry(g.dayLog, date, { done }) })
+                : g
+        ));
+        return { done, autoCompleted: !goal.completed && after.completed };
+    }, []);
+
+    // Bir günün notunu ve (varsa) günlük miktarını kaydeder. details: { note, value }
+    const setDayDetails = useCallback((goalId, date, details) => {
+        const patch = {};
+        if (details.note !== undefined) patch.note = (details.note || '').trim().slice(0, 1000);
+        if (details.value !== undefined) patch.value = details.value;
+        setGoals(prev => prev.map(g =>
+            g.id === goalId && g.tracking
+                ? { ...g, dayLog: setDayEntry(g.dayLog, date, patch) }
+                : g
+        ));
+    }, []);
+
+    // Toplu taşıma: verilen hedefleri bir klasöre alır
+    const moveGoalsToFolder = useCallback((ids, folderId) => {
+        const set = new Set(ids);
+        setGoals(prev => prev.map(g => set.has(g.id) ? { ...g, folderId } : g));
     }, []);
 
     const togglePin = useCallback((id) => {
@@ -165,6 +195,16 @@ export function useGoals(activeFolderId = null) {
         setGoals(prev => prev.filter(g => g.id !== id));
     }, []);
 
+    // Silinen hedefi eski sırasına geri koyar ("Geri al")
+    const restoreGoal = useCallback((goal, index = 0) => {
+        setGoals(prev => {
+            if (prev.some(g => g.id === goal.id)) return prev;
+            const next = [...prev];
+            next.splice(Math.max(0, Math.min(index, next.length)), 0, goal);
+            return next;
+        });
+    }, []);
+
     // BUG-14: Move all goals in a folder to 'default' (called before folder deletion)
     const moveGoalsToDefaultFolder = useCallback((folderId) => {
         setGoals(prev => prev.map(g =>
@@ -174,21 +214,26 @@ export function useGoals(activeFolderId = null) {
 
     const updateGoal = useCallback((id, data) => {
         setGoals(prev =>
-            prev.map(g =>
-                g.id === id
-                    ? {
-                        ...g,
-                        name: data.name.trim(),
-                        category: data.category,
-                        deadline: data.deadline,
-                        startDate: data.startDate !== undefined ? data.startDate : g.startDate,
-                        description: (data.description || '').trim(),
-                        progress: data.progress !== undefined ? data.progress : g.progress,
-                        recurring: data.recurring !== undefined ? data.recurring : g.recurring,
-                        reminderDays: data.reminderDays !== undefined ? data.reminderDays : g.reminderDays,
-                    }
-                    : g
-            )
+            prev.map(g => {
+                if (g.id !== id) return g;
+                const next = {
+                    ...g,
+                    name: data.name.trim(),
+                    category: data.category,
+                    deadline: data.deadline,
+                    startDate: data.startDate !== undefined ? data.startDate : g.startDate,
+                    description: (data.description || '').trim(),
+                    progress: data.progress !== undefined ? data.progress : g.progress,
+                    recurring: data.recurring !== undefined ? data.recurring : g.recurring,
+                    reminderDays: data.reminderDays !== undefined ? data.reminderDays : g.reminderDays,
+                    trackingUnit: data.trackingUnit !== undefined ? String(data.trackingUnit).trim().slice(0, 20) : g.trackingUnit,
+                    dailyReminder: data.dailyReminder !== undefined ? data.dailyReminder : g.dailyReminder,
+                };
+                if (!g.tracking) return next;
+                // Takip hedefinde tarih aralığı değişmiş olabilir: ilerlemeyi günlerden yeniden hesapla
+                const { total, done } = trackingStats(next);
+                return { ...next, recurring: null, progress: total > 0 ? Math.round(done / total * 100) : 0 };
+            })
         );
     }, []);
 
@@ -236,7 +281,7 @@ export function useGoals(activeFolderId = null) {
             prev.map(g => {
                 if (g.id !== goalId) return g;
                 const subtasks = [...(g.subtasks || []), entry];
-                return { ...g, subtasks, progress: calcProgressFromSubtasks(subtasks) };
+                return { ...g, subtasks, progress: g.tracking ? g.progress : calcProgressFromSubtasks(subtasks) };
             })
         );
     }, []);
@@ -248,7 +293,7 @@ export function useGoals(activeFolderId = null) {
                 const subtasks = (g.subtasks || []).map(s =>
                     s.id === subtaskId ? { ...s, completed: !s.completed } : s
                 );
-                return { ...g, subtasks, progress: calcProgressFromSubtasks(subtasks) };
+                return { ...g, subtasks, progress: g.tracking ? g.progress : calcProgressFromSubtasks(subtasks) };
             })
         );
     }, []);
@@ -258,13 +303,15 @@ export function useGoals(activeFolderId = null) {
             prev.map(g => {
                 if (g.id !== goalId) return g;
                 const subtasks = (g.subtasks || []).filter(s => s.id !== subtaskId);
-                return { ...g, subtasks, progress: calcProgressFromSubtasks(subtasks) };
+                return { ...g, subtasks, progress: g.tracking ? g.progress : calcProgressFromSubtasks(subtasks) };
             })
         );
     }, []);
 
     // ── Derived: sorted + filtered + searched ──────────────────
-    const sortedFiltered = (() => {
+    const sortedFiltered = useMemo(() => {
+        // Kalan günü hedef başına bir kez hesapla (sıralama karşılaştırmalarında tekrar tekrar değil)
+        const daysLeft = new Map(goals.map(g => [g.id, calcRemainingDays(g.deadline)]));
         let list = [...goals];
 
         // Klasör filtresi
@@ -275,6 +322,7 @@ export function useGoals(activeFolderId = null) {
         if (filterBy === 'active')    list = list.filter(g => !g.completed);
         if (filterBy === 'completed') list = list.filter(g => g.completed);
         if (filterBy === 'pinned')    list = list.filter(g => g.pinned);
+        if (filterBy === 'overdue')   list = list.filter(g => !g.completed && daysLeft.get(g.id) < 0);
 
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
@@ -287,8 +335,8 @@ export function useGoals(activeFolderId = null) {
         list.sort((a, b) => {
             if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
             switch (sortBy) {
-                case 'days':     return calcRemainingDays(a.deadline) - calcRemainingDays(b.deadline);
-                case 'date':     return new Date(a.deadline) - new Date(b.deadline);
+                case 'days':     return daysLeft.get(a.id) - daysLeft.get(b.id);
+                case 'date':     return a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : 0;
                 case 'category': return a.category.localeCompare(b.category);
                 case 'name':     return a.name.localeCompare(b.name, 'tr');
                 default:         return 0;
@@ -296,7 +344,7 @@ export function useGoals(activeFolderId = null) {
         });
 
         return list;
-    })();
+    }, [goals, activeFolderId, filterBy, searchQuery, sortBy]);
 
     // ── Stats ──────────────────────────────────────────────────
     const totalCount = goals.length;
@@ -318,6 +366,10 @@ export function useGoals(activeFolderId = null) {
         toggleComplete,
         togglePin,
         deleteGoal,
+        restoreGoal,
+        toggleDay,
+        setDayDetails,
+        moveGoalsToFolder,
         moveGoalsToDefaultFolder,
         addUpdate,
         editUpdate,

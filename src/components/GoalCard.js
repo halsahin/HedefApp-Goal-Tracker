@@ -6,12 +6,16 @@ import { Typography, Spacing, Radii, Shadows } from '../constants/theme';
 import { Feather } from '@expo/vector-icons';
 import { CATEGORY_ICON_MAP, getCategoryLabel } from '../constants/categories';
 import { calcRemainingDays, formatDate, getDayChipInfo } from '../utils/dateUtils';
+import { trackingStats } from '../utils/tracking';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 const SWIPE_THRESHOLD = 80;
 
-export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete, onPress }) {
+export default function GoalCard({
+    goal, onToggleComplete, onTogglePin, onDelete, onPress,
+    onToggleToday, selectionMode = false, selected = false, onSelect, onLongPress,
+}) {
     const { t, locale } = useLanguage();
     const { colors } = useTheme();
 
@@ -19,6 +23,15 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
     const overdue = !goal.completed && days < 0;
     const icon = CATEGORY_ICON_MAP[goal.category] || 'bookmark';
     const chipInfo = getDayChipInfo(days, goal.completed);
+
+    // Günlük takip hedefi: kutucuk hedefi değil bugünü işaretler
+    const stats = goal.tracking ? trackingStats(goal) : null;
+    const ticksToday = !!stats && !goal.completed && stats.todayInRange;
+    const checked = selectionMode ? selected : ticksToday ? stats.todayDone : goal.completed;
+
+    // PanResponder bir kez oluşturulduğu için güncel değerlere ref üzerinden erişilir
+    const selectionModeRef = useRef(selectionMode);
+    selectionModeRef.current = selectionMode;
 
     const dayDisplay = goal.completed ? 'completed' : `${Math.abs(days)}`;
     const dayTextLabel = goal.completed
@@ -48,8 +61,9 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
         // Don't claim on start — let FlatList handle vertical scroll and taps naturally
         onStartShouldSetPanResponder: () => false,
         // Only claim when gesture is clearly horizontal
+        // Seçim modunda kaydırma hareketleri kapalıdır
         onMoveShouldSetPanResponder: (_, g) =>
-            Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+            !selectionModeRef.current && Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
         onPanResponderTerminationRequest: () => true,
 
         onPanResponderMove: (_, g) => {
@@ -115,7 +129,7 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
             <Animated.View
                 style={[styles.card, {
                     backgroundColor: cardBg,
-                    borderColor: cardBorder,
+                    borderColor: selectionMode && selected ? colors.accentDark : cardBorder,
                     transform: [{ translateX }],
                 }]}
                 {...panResponder.panHandlers}
@@ -124,17 +138,29 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
 
                 <TouchableOpacity
                     style={styles.cardInner}
-                    onPress={onPress}
+                    onPress={selectionMode ? () => onSelect?.(goal.id) : onPress}
+                    onLongPress={() => onLongPress?.(goal.id)}
+                    delayLongPress={350}
                     activeOpacity={0.85}
                 >
                     <TouchableOpacity
                         style={[styles.checkbox,
-                            goal.completed && { backgroundColor: colors.success, borderColor: colors.success }
+                            checked && (selectionMode
+                                ? { backgroundColor: colors.accentDark, borderColor: colors.accentDark }
+                                : { backgroundColor: colors.success, borderColor: colors.success })
                         ]}
-                        onPress={() => onToggleComplete(goal.id)}
+                        onPress={() => {
+                            if (selectionMode) onSelect?.(goal.id);
+                            else if (ticksToday) onToggleToday?.(goal.id);
+                            else onToggleComplete(goal.id);
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         activeOpacity={0.7}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked }}
+                        accessibilityLabel={ticksToday && !selectionMode ? t('tracking.today') : goal.name}
                     >
-                        {goal.completed && <Feather name="check-circle" size={24} color={colors.success} style={styles.checkmark} />}
+                        {checked && <Feather name="check" size={14} color="#FFFFFF" />}
                     </TouchableOpacity>
 
                     <View style={styles.body}>
@@ -148,6 +174,15 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
                                 </View>
                             </View>
                             {goal.recurring && <Feather name="repeat" size={14} color={colors.textMuted} style={styles.recurringBadge} />}
+                            {goal.recurring && goal.streak > 0 && (
+                                <View
+                                    style={[styles.streakBadge, { backgroundColor: colors.accentBg }]}
+                                    accessibilityLabel={t('goalCard.streak', { n: goal.streak })}
+                                >
+                                    <Feather name="zap" size={11} color={colors.accentDark} />
+                                    <Text style={[styles.streakText, { color: colors.accentDark }]}>{goal.streak}</Text>
+                                </View>
+                            )}
                         </View>
 
                         <Text style={[styles.name, { color: colors.text },
@@ -183,6 +218,16 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
                             </View>
                         )}
 
+                        {stats && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.xs }}>
+                                <Feather name="calendar" size={12} color={colors.textLight} />
+                                <Text style={[styles.subtaskHint, { color: colors.textLight, marginTop: 0, marginLeft: 4 }]}>
+                                    {t('tracking.cardSummary', { done: stats.done, total: stats.total })}
+                                    {ticksToday ? ` · ${stats.todayDone ? t('tracking.todayDone') : t('tracking.todayPending')}` : ''}
+                                </Text>
+                            </View>
+                        )}
+
                         {goal.subtasks && goal.subtasks.length > 0 && (
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.xs }}>
                                 <Feather name="check-square" size={12} color={colors.textLight} />
@@ -204,14 +249,14 @@ export default function GoalCard({ goal, onToggleComplete, onTogglePin, onDelete
                             <ChipView chipInfo={chipInfo} t={t} colors={colors} />
                         </View>
 
-                        <View style={styles.actions}>
+                        {!selectionMode && <View style={styles.actions}>
                             <TouchableOpacity onPress={() => onTogglePin(goal.id)} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
                                     <Feather name="star" size={18} color={goal.pinned ? colors.accentDark : colors.textLight} />
                             </TouchableOpacity>
                             <TouchableOpacity onPress={handleDeletePress} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
                                 <Feather name="trash-2" size={18} color={colors.danger} />
                             </TouchableOpacity>
-                        </View>
+                        </View>}
                     </View>
                 </TouchableOpacity>
             </Animated.View>
@@ -308,6 +353,15 @@ const styles = StyleSheet.create({
     },
     categoryBadgeText: { fontSize: Typography.xs, fontWeight: '600' },
     recurringBadge: { fontSize: 12 },
+    streakBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2,
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        borderRadius: Radii.full,
+    },
+    streakText: { fontSize: Typography.xs, fontWeight: '700' },
     name: { fontSize: Typography.base, fontWeight: '600', lineHeight: 20, marginBottom: 3 },
     desc: { fontSize: Typography.sm - 1, marginBottom: 4, lineHeight: 18 },
     dateInfo: { fontSize: Typography.xs, marginTop: 4 },
