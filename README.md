@@ -11,18 +11,25 @@ A minimalist React Native app for tracking personal goals. Create goals with cat
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/01_home.png" width="19%" alt="Home" />
-  <img src="assets/screenshots/02_add_goal.png" width="19%" alt="Add goal" />
-  <img src="assets/screenshots/03_detail_subtasks.png" width="19%" alt="Goal detail and subtasks" />
-  <img src="assets/screenshots/04_detail_journal.png" width="19%" alt="Progress journal" />
-  <img src="assets/screenshots/05_side_drawer.png" width="19%" alt="Side drawer" />
+  <img src="assets/screenshots/01_home.png" width="23%" alt="Home" />
+  <img src="assets/screenshots/02_add_goal.png" width="23%" alt="Add goal — daily tracking" />
+  <img src="assets/screenshots/05_daily_tracking.png" width="23%" alt="Daily tracking" />
+  <img src="assets/screenshots/06_bulk_select.png" width="23%" alt="Bulk select" />
 </p>
 <p align="center">
-  <img src="assets/screenshots/06_stats.png" width="19%" alt="Statistics" />
-  <img src="assets/screenshots/07_calendar.png" width="19%" alt="Calendar" />
-  <img src="assets/screenshots/08_dark_mode.png" width="19%" alt="Dark mode" />
-  <img src="assets/screenshots/09_pomodoro_dark.png" width="19%" alt="Pomodoro timer" />
+  <img src="assets/screenshots/03_detail_subtasks.png" width="23%" alt="Goal detail and subtasks" />
+  <img src="assets/screenshots/04_detail_journal.png" width="23%" alt="Progress journal" />
+  <img src="assets/screenshots/07_side_drawer.png" width="23%" alt="Side drawer" />
+  <img src="assets/screenshots/08_stats.png" width="23%" alt="Statistics" />
 </p>
+<p align="center">
+  <img src="assets/screenshots/09_calendar.png" width="23%" alt="Calendar" />
+  <img src="assets/screenshots/10_dark_mode.png" width="23%" alt="Dark mode" />
+  <img src="assets/screenshots/11_daily_tracking_dark.png" width="23%" alt="Daily tracking — dark" />
+  <img src="assets/screenshots/12_pomodoro_dark.png" width="23%" alt="Pomodoro timer" />
+</p>
+
+<sub>Screenshots are generated from the app itself with <code>bash scripts/screenshots/run.sh</code>.</sub>
 
 ---
 

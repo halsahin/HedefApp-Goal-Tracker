@@ -47,7 +47,8 @@ hedefapp/
 │   └── constants/          # categories, theme renk paletleri
 ├── tests/                  # Saf mantık birim testleri — Node ile (`npm run test:unit`)
 ├── __tests__/              # Bileşen ve hook testleri — Jest ile (`npm run test:ui`); ortak sahte modüller jest.setup.js'te
-├── assets/                 # icon, splash, adaptive-icon, favicon
+├── scripts/screenshots/    # README ekran görüntülerini üretir (`bash scripts/screenshots/run.sh`)
+├── assets/                 # icon, splash, adaptive-icon, favicon, screenshots
 └── src/config/ads.js       # GİTİGNORE — gerçek AdMob ID'leri burada tutulur
 ```
 

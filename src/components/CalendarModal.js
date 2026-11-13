@@ -10,16 +10,41 @@ import { calcRemainingDays, formatDate } from '../utils/dateUtils';
 import { CATEGORY_ICON_MAP } from '../constants/categories';
 
 let CalendarComponent = null;
+let LocaleConfig = null;
 try {
-    CalendarComponent = require('react-native-calendars').Calendar;
+    const calendars = require('react-native-calendars');
+    CalendarComponent = calendars.Calendar;
+    LocaleConfig = calendars.LocaleConfig;
 } catch {
     CalendarComponent = null;
 }
 
+// Takvimin ay ve gün adlarını uygulama diline çevirir (kütüphanenin varsayılanı İngilizce'dir)
+function applyCalendarLocale(language, locale) {
+    if (!LocaleConfig) return;
+    if (!LocaleConfig.locales[language]) {
+        const month = (i, style) => new Date(2024, i, 1, 12).toLocaleDateString(locale, { month: style });
+        // 7 Ocak 2024 bir pazar günüdür; kütüphane gün adlarını pazardan başlatır
+        const weekday = (i, style) => new Date(2024, 0, 7 + i, 12).toLocaleDateString(locale, { weekday: style });
+        try {
+            LocaleConfig.locales[language] = {
+                monthNames: Array.from({ length: 12 }, (_, i) => month(i, 'long')),
+                monthNamesShort: Array.from({ length: 12 }, (_, i) => month(i, 'short')),
+                dayNames: Array.from({ length: 7 }, (_, i) => weekday(i, 'long')),
+                dayNamesShort: Array.from({ length: 7 }, (_, i) => weekday(i, 'short')),
+            };
+        } catch {
+            return; // Intl desteklenmiyorsa varsayılan (İngilizce) kalır
+        }
+    }
+    LocaleConfig.defaultLocale = language;
+}
+
 export default function CalendarModal({ visible, onClose, goals }) {
     const { colors, isDark } = useTheme();
-    const { t, locale } = useLanguage();
+    const { t, locale, language } = useLanguage();
     const [selectedDate, setSelectedDate] = useState(null);
+    applyCalendarLocale(language, locale);
 
     const markedDates = useMemo(() => {
         const marks = {};
@@ -90,6 +115,7 @@ export default function CalendarModal({ visible, onClose, goals }) {
                 <ScrollView showsVerticalScrollIndicator={false}>
                     {CalendarComponent ? (
                         <CalendarComponent
+                            key={language}
                             markingType="multi-dot"
                             markedDates={markedDates}
                             onDayPress={day => setSelectedDate(day.dateString)}
