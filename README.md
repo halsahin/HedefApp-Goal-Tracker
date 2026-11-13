@@ -145,3 +145,9 @@ This app was developed with **Claude Sonnet 4.6** (Anthropic).
 ## License
 
 MIT
+
+---
+
+## Privacy
+
+See the [Privacy Policy](PRIVACY.md).

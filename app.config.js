@@ -19,7 +19,7 @@ module.exports = {
     expo: {
         name: "HedefApp",
         slug: "hedefapp",
-        version: "1.3.5",
+        version: "1.4.0",
         orientation: "portrait",
         icon: "./assets/icon.png",
         userInterfaceStyle: "automatic",
@@ -40,7 +40,6 @@ module.exports = {
             },
             edgeToEdgeEnabled: true,
             package: "com.r1cha.hedefApp",
-            versionCode: 10,
             allowBackup: true,
             googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json"
         },

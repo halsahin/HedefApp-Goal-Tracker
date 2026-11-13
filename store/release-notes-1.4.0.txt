@@ -1,0 +1,40 @@
+<en-US>
+• New: Daily Tracking goals — tick off each day until your end date and add a note or amount per day (e.g. "read for 30 days")
+• New: select multiple goals to complete, favorite, move or delete them at once
+• New: undo after deleting, "Overdue" filter, streaks for repeating goals
+• New: choose your reminder time; timer finish notifications
+• Google Drive sync is safer and backups now include timer records and settings
+• Local backup export/restore fixed, plus many other fixes
+</en-US>
+<tr-TR>
+• Yeni: Günlük Takip hedefleri — bitiş tarihine kadar her günü ayrı işaretleyin, güne özel not veya miktar ekleyin (ör. "30 gün kitap oku")
+• Yeni: birden çok hedefi seçip toplu tamamlayın, favorileyin, taşıyın veya silin
+• Yeni: silmeyi geri alma, "Geciken" filtresi, tekrarlı hedeflerde seri
+• Yeni: hatırlatma saatini seçin; sayaç bitiş bildirimi
+• Google Drive senkronu daha güvenli; yedekler sayaç kayıtlarını ve ayarları da içeriyor
+• Yerel yedek alma/geri yükleme ve birçok hata düzeltildi
+</tr-TR>
+<zh-CN>
+• 新增：每日打卡目标——在结束日期前逐日打卡，并可为每天添加备注或数量（例如“连续阅读 30 天”）
+• 新增：多选目标，批量完成、收藏、移动或删除
+• 新增：删除后可撤销、“已逾期”筛选、重复目标连续记录
+• 新增：自定义提醒时间；计时结束通知
+• Google Drive 同步更安全，备份现包含计时记录和设置
+• 修复本地备份导出/恢复及其他多项问题
+</zh-CN>
+<ja-JP>
+• 新機能：毎日の記録——終了日まで1日ごとにチェックし、その日のメモや数量を追加（例：「30日間読書」）
+• 新機能：複数の目標を選択して、まとめて完了・お気に入り・移動・削除
+• 新機能：削除の取り消し、「期限切れ」フィルター、繰り返し目標の連続記録
+• 新機能：リマインダーの時刻を選択、タイマー終了通知
+• Google Drive 同期がより安全に。バックアップにタイマー記録と設定を追加
+• ローカルバックアップの書き出し／復元を修正、その他多数の不具合を修正
+</ja-JP>
+<ko-KR>
+• 새 기능: 매일 기록 목표 — 종료일까지 하루씩 체크하고 날짜별 메모나 분량을 추가하세요 (예: "30일 독서")
+• 새 기능: 여러 목표를 선택해 한 번에 완료, 즐겨찾기, 이동, 삭제
+• 새 기능: 삭제 실행 취소, "기한 지남" 필터, 반복 목표 연속 기록
+• 새 기능: 알림 시간 설정, 타이머 종료 알림
+• Google Drive 동기화가 더 안전해졌고 백업에 타이머 기록과 설정이 포함됩니다
+• 로컬 백업 내보내기/복원 수정 및 다수의 오류 수정
+</ko-KR>
